@@ -1,4 +1,7 @@
-let k = 444
-let m = 43
-let o = 99
-print o
+cow = 5
+
+if 5 > 2
+    9
+else
+    52
+    

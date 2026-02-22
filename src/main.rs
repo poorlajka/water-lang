@@ -1,20 +1,11 @@
 
 mod lexer;
 mod parser;
-mod compiler;
-mod vm;
 
 use crate::lexer::{lang_lexer, lang_token};
-use crate::parser::{lang_parser};
-use crate::compiler::{lang_compiler};
-use crate::vm::{lang_vm};
-use chumsky::{
-    input::{Stream, ValueInput},
-    prelude::*,
-};
+use crate::parser::lang_parser;
 
 use std::fs;
-use chumsky::Parser;
 
 fn main () {
 
@@ -32,33 +23,44 @@ fn main () {
     /*
         Tokenize code
     */
-    let tokens = lang_lexer::tokenize(&code);
+    let lang_lexer::LexingArtifacts {
+        tokens,
+        errors,
+    } = lang_lexer::tokenize(&code);
 
-    let token_stream = Stream::from_iter(tokens.clone().into_iter());
 
-    for token in tokens {
+    if !errors.is_empty() {
+        for error in &errors {
+            println!("{:?}", error);
+        }
+        return;
+    }
+
+    for token in &tokens {
         println!("{:?}", token);
     }
-    
-    lang_parser::parser().parse(token_stream);
 
     /*
         Parse tokens
     
-    let lang_parser::ParserArtifacts {
+    */
+    let lang_parser::ParsingArtifacts {
         ast,
         errors,
-    } = lang_parser::parse(&tokens);
-    */
-    /*
+    } = lang_parser::parse_module(&tokens, &"main".to_string());
+
     if !errors.is_empty() {
         for error in errors {
             println!("{:?}", error);
         }
     }
+
+    println!("{:?}", ast);
+
+    /*
+    }
         */
 
-    //println!("{:?}", ast);
 
     /*  
         Compile AST to bytecode

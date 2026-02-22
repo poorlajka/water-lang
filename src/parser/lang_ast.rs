@@ -1,107 +1,111 @@
+use logos::Span;
+
 #[derive(Debug)]
-pub struct AST {
-    pub main: Function,
+pub struct Spanned<T> {
+    pub node: T,
+    pub span: Span,
 }
 
 #[derive(Debug)]
-pub struct Function {
-    pub function_decl: FunctionDecl,
-    pub body: Vec<Statement>,
+pub struct Program {
+    pub modules: Vec<Module>
 }
 
 #[derive(Debug)]
-pub struct FunctionDecl {
-    pub name: Symbol,
-    pub inputs: Vec<Parameter>,
-    pub outputs: Vec<DataType>, 
+pub struct Module {
+    pub name: String,
+    pub statements: Vec<Statement>,
 }
 
-#[derive(Debug)]
-pub struct Parameter {
-    pub data_type: DataType,
-    pub value: Expression,
-}
 
 #[derive(Debug)]
 pub enum Statement {
-    Function(Function),
-    DataTypeDef(DataType),
     Expression(Expression),
     Assignment(Assignment),
-    Conditional(Conditional),
-    Loop(Loop),
-    Print(Symbol),
-    Return(Return),
+    Function(Function),
 }
 
 #[derive(Debug)]
 pub enum Expression {
-    Constant(Constant),
-    Variable(Symbol),
-    FunctionCall,
-    BinaryExpression(BinaryExpression),
+    Integer(i64),
+    Float(f64),
+    String(String),
+    Variable(String),
+    FunctionCall(FunctionCall),
+    Unary {
+        op: UnaryOp,
+        expression: Box<Expression>,
+    },
+    Binary {
+        lhs: Box<Expression>,
+        op: BinaryOp,
+        rhs: Box<Expression>,
+    },
+    Conditional {
+        condition: Box<Expression>,
+        then_branch: Box<Expression>,
+        else_branch: Box<Expression>,
+    },
+    Block {
+        statements: Vec<Statement>,
+        final_expr: Option<Box<Expression>>,
+    }
 }
 
 #[derive(Debug)]
-pub struct BinaryExpression {
-    pub lhs: Box<Expression>,
-    pub rhs: Box<Expression>,
-    pub operator: BinaryOperator,
+pub enum UnaryOp {
+    Neg,
+    Not,
+}
+
+#[derive(Debug)]
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Lt,
+    Gt,
+    Eq,
+}
+
+#[derive(Debug)]
+pub struct Function {
+    pub signature: FunctionSignature,
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug)]
+pub struct FunctionSignature {
+    pub name: String,
+    pub args: Vec<Parameter>,
+    pub output: DataType, 
+}
+
+#[derive(Debug)]
+pub struct Parameter {
+    pub name: String,
+    pub ptype: DataType,
 }
 
 #[derive(Debug)]
 pub enum DataType {
     Enum,
     Struct,
-}
-
-#[derive(Debug)]
-pub enum Loop {
-    ForEach,
-    While,
+    Implicit,
 }
 
 #[derive(Debug)]
 pub struct Assignment {
-    pub lhs: Vec<Symbol>,
+    pub lhs: String,
     pub rhs: Expression,
 }
 
 #[derive(Debug)]
-pub struct Symbol {
-    pub name: String,
+pub struct FunctionCall {
 }
 
-#[derive(Debug)]
-pub struct Conditional {
-    pub if_branches: Vec<ConditionalBranch>,
-    pub else_branch: Vec<Statement>,
-}
 
-#[derive(Debug)]
-pub struct ConditionalBranch {
-    pub condition: Expression,
-    pub body: Vec<Statement>,
-}
-
-#[derive(Debug)]
-pub struct Return {
-    pub value: Expression,
-}
-
-#[derive(Debug)]
-pub enum BinaryOperator {
-    Addition,
-    Subtraction,
-    Division,
-    Multiplication,
-    Mod,
-}
-
-#[derive(Debug)]
-pub enum Constant {
-    Integer(i64),
-}
 
 
 

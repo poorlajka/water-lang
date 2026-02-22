@@ -1,7 +1,5 @@
 use crate::lang_token::{Token, LexingError};
 use logos::{Logos, Span};
-use chumsky::span::{SimpleSpan};
-
 
 fn count_columns(s: &str) -> usize {
     let mut column = 0;
@@ -15,25 +13,26 @@ fn count_columns(s: &str) -> usize {
     column
 }
 
-pub struct LexerArtifacts<'a> {
-    pub tokens: Vec<Token<'a>>,
-    pub errors: Vec<LexingError>,
+pub struct LexingArtifacts {
+    pub tokens: Vec<(Token, Span)>,
+    pub errors: Vec<(LexingError, Span)>,
 }
 
-pub fn tokenize (code: &str) -> Vec<(Token, SimpleSpan)> {
-    let mut lexer_artifacts = LexerArtifacts {
-        tokens: Vec::new(),
+pub fn tokenize (code: &str) -> LexingArtifacts {
+
+    let mut lexing_artifacts = LexingArtifacts {
+        tokens: vec![(Token::LParen, 2..3)], // Insert a dummy first token to make parser code cleaner
         errors: Vec::new(),
     };
-    let mut tokens = Vec::new();
+
     let mut lexer = Token::lexer(code).spanned();
     
     let mut old_indent = 0;
 
     while let Some((token, span)) = lexer.next() {
         match token.clone() {
-            Ok(token) => tokens.push((token, span.clone().into())),
-            Err(error) => tokens.push((Token::Error, span.clone().into())),
+            Ok(token) => lexing_artifacts.tokens.push((token, span.clone())),
+            Err(error) => lexing_artifacts.errors.push((LexingError::default(), span.clone())),
         }
 
         if let Ok(Token::Newline) = token {
@@ -43,14 +42,14 @@ pub fn tokenize (code: &str) -> Vec<(Token, SimpleSpan)> {
             let new_indent = count_columns(&leading_ws);
             
             if new_indent > old_indent {
-                tokens.push((Token::Indent, span.clone().into()));
+                lexing_artifacts.tokens.push((Token::Indent, span.clone().into()));
             }
             else if new_indent < old_indent {
-                tokens.push((Token::Dedent, span.clone().into()));
+                lexing_artifacts.tokens.push((Token::Dedent, span.clone().into()));
             }
             old_indent = new_indent;
         }
     }
 
-    tokens
+    lexing_artifacts
 }

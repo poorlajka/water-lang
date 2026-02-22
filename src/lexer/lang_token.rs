@@ -3,45 +3,58 @@ use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(error = LexingError)]
-pub enum Token<'a> {
+pub enum Token {
 
     // Keywords
     #[token("for")]
     For,
 
-    #[token("let")]
-    Let,
-
     #[token("in")]
     In,
 
-    #[token("fn")]
-    Function,
+    #[token("if")]
+    If,
 
-    #[token("type")]
-    Type,
+    #[token("then")]
+    Then,
+
+    #[token("else")]
+    Else,
 
     #[token("print")]
     Print,
-
-    #[token("interface")]
-    Interface,
 
     #[token("\n")]
     #[token(";")]
     Newline,
     
+    #[token("==")]
+    EqEq,
+    
+    #[token("!=")]
+    NotEq,
+
+    #[token("=>")]
+    RArrow,
+
     #[token("=")]
-    Assignment,
+    Eq,
+
+    #[regex(r#""([^"\\]|\\.)*""#, parse_string)]
+    DoubleQuotedString(String),
+
+    #[regex(r#"'([^'\\]|\\.)*'"#, parse_string)]
+    SingleQuotedString(String),
+
 
     // Identifiers
-    #[regex("[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice())]
-    Identifier(&'a str),
+    #[regex("[a-zA-Z_][a-zA-Z0-9_]*", |lex| String::from(lex.slice()))]
+    Identifier(String),
 
     #[regex("-?[0-9]+", |lex| lex.slice().parse())]
     Integer(i64),
 
-    #[regex("-?[-1-9]+\\.[0-9]+", |lex| lex.slice().parse())]
+    #[regex("-?[0-9]+\\.[0-9]+", |lex| lex.slice().parse())]
     Float(f64),
 
     // Punctuation
@@ -56,22 +69,29 @@ pub enum Token<'a> {
     Star,
 
     #[token("(")]
-    Lparen,
+    LParen,
 
     #[token(")")]
-    Rparen,
+    RParen,
 
     #[token("[")]
-    Lbracket,
+    LBracket,
 
     #[token("]")]
-    Rbracket,
+    RBracket,
 
     #[token("/")]
     Slash,
 
     #[token("..")]
     Range,
+
+    #[token("<")]
+    Lt,
+
+    #[token(">")]
+    Gt,
+
 
     // Whitespace (all spaces/tabs)
     #[regex(r"[ \t]+", logos::skip)]
@@ -102,4 +122,31 @@ impl From<std::num::ParseFloatError> for LexingError {
   fn from(_: std::num::ParseFloatError) -> Self {
      LexingError::NumberParseError
   }
+}
+
+fn parse_string(lex: &mut logos::Lexer<Token>) -> String {
+    let slice = lex.slice();
+    let inner = &slice[1..slice.len() - 1];
+
+    let mut result = String::new();
+    let mut chars = inner.chars();
+
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(next) = chars.next() {
+                match next {
+                    'n' => result.push('\n'),
+                    't' => result.push('\t'),
+                    '\\' => result.push('\\'),
+                    '"' => result.push('"'),
+                    '\'' => result.push('\''),
+                    other => result.push(other),
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
 }

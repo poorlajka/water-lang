@@ -1,53 +1,186 @@
 use crate::lexer::lang_token::Token;
 use crate::parser::lang_ast;
+use crate::parser::pratt;
+use logos::Span;
 
-use chumsky::{
-    input::{Stream, ValueInput},
-    prelude::*,
-};
+pub struct ParsingArtifacts {
+    pub ast: lang_ast::Module,
+    pub errors: Vec<ParsingError>,
+}
 
-use chumsky::input::IterInput;
+#[derive(Debug)]
+pub struct ParsingError {
+    pub message: String,
+}
 
+pub struct TokenStream {
+    tokens: Vec<(Token, Span)>,
+    pos: usize,
+    save_pos: usize,
+}
 
-pub struct ParserArtifacts {
-    pub ast: lang_ast::AST,
-    pub errors: i32,
+impl TokenStream {
+    pub fn next(&mut self, offset: usize) -> Option<(Token, Span)> {
+        if self.pos < self.tokens.len() - offset {
+            self.pos += offset;
+            Some(self.tokens[self.pos].clone())
+        }
+        else {
+            None
+        }
+    }
+
+    pub fn peek(&self, offset: usize) -> Option<(Token, Span)> {
+        if self.pos < self.tokens.len() - offset {
+            Some(self.tokens[self.pos + offset].clone())
+        }
+        else {
+            None
+        }
+    }
+
+    pub fn save(&mut self) {
+        self.save_pos = self.pos;
+    }
+
+    pub fn backtrack(&mut self) {
+        self.pos = self.save_pos;
+    }
+}
+
+pub fn parse_module(tokens: &Vec<(Token, Span)>, name: &String) -> ParsingArtifacts {
+
+    let mut parsing_artifacts = ParsingArtifacts {
+        ast: lang_ast::Module {
+            name: name.to_string(),
+            statements: Vec::new(),
+        },
+        errors: Vec::new(),
+    };
+
+    let mut token_stream = TokenStream {
+        tokens: tokens.to_vec(),
+        pos: 0,
+        save_pos: 0,
+    };
+
+    loop {
+        match parse_statement(&mut token_stream) {
+            Ok(statement) => parsing_artifacts.ast.statements.push(statement),
+            Err(error) => parsing_artifacts.errors.push(error),
+        }
+
+        if token_stream.peek(1).is_none() {
+            break;
+        }
+    }
+
+    parsing_artifacts
 }
 
 /*
-    Holy shit there has to be a better way of writing this right????
+    <statement> ::= <assignment>
+        | <expression>
+        | <loop>
+        | return
+        | import
 */
-pub fn parser<'tokens, 'src: 'tokens, I>(
-) -> impl Parser<
-    'tokens,
-    I,
-    lang_ast::AST,
-    extra::Err<Rich<'tokens, (Token<'src>, SimpleSpan)>>
->
-where
-    I: ValueInput<
-        'tokens,
-        Token = (Token<'src>, SimpleSpan),
-        Span = SimpleSpan,
-    >,
-{
+fn parse_statement(token_stream: &mut TokenStream) -> Result<lang_ast::Statement, ParsingError> {
 
-    /*
-        <unary_operator> ::= "-" | "not"
-        <binary_operator> ::= 
-            "+" | "-" | "*" | "/" | "%"
-            | "and" | "or" | "==" | "!=" 
-            | "<" | "<=" | ">" | ">="
-    */
+    let mut save_pos = token_stream.pos;
+    match parse_assignment(token_stream) {
+        Ok(assignment) => {
+            return Ok(lang_ast::Statement::Assignment(assignment));
+        }
+        Err(error) => {
+            token_stream.pos = save_pos;
+        }
+    }
 
-    /*
-        <function_call> ::= IDENTIFIER "(" [ <expression> ( "," <expression> )* [ "," ] ] ")"
-    */
+    save_pos = token_stream.pos;
+    match pratt::parse_expression(token_stream, 0) {
+        Ok(expression) => {
+            return Ok(lang_ast::Statement::Expression(expression));
+        }
+        Err(error) => {
+            token_stream.pos = save_pos;
+        }
+    }
 
-    /*
-        <unaryexpression> ::= <unary_operator>* ( <function_call> | CONSTANT | IDENTIFIER )
-        <expression> ::= <unaryexpression> [ <binary_operator> <expression> ]*
-    */
+    Err(ParsingError {message: "Parsing error".to_string()})
+}
+
+fn parse_assignment(token_stream: &mut TokenStream) -> Result<lang_ast::Assignment, ParsingError> {
+    match token_stream.peek(1) {
+        Some((Token::Identifier(identifier), span)) => {
+            match token_stream.peek(2) {
+                Some((Token::Eq, span)) => {
+                    token_stream.next(2);
+                    match pratt::parse_expression(token_stream, 0) {
+                        Ok(expression) => {
+                            return Ok(lang_ast::Assignment {
+                                lhs: identifier,
+                                rhs: expression,
+                            });
+                        }
+                        Err(error) => {
+
+                        }
+                    }
+                }
+                _ => {
+
+                }
+            }
+        }
+        _ => {
+
+        }
+    }
+
+    Err(ParsingError {message: "Parsing error".to_string()})
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     /*
         <loop> ::= <for_loop> | <while_loop>
@@ -62,303 +195,91 @@ where
         <assignment> ::= [ "mut" ] IDENTIFIER ( "," [ "mut" ] IDENTIFIER )* "=" <expression>
     */
 
-    /*
-        <statement> ::= <expression> 
-            | <assignment> 
-            | <conditional> 
-            | <loop> 
-            | <function> 
-            | <datatype>
-    */
+            /*
+pub fn parser<'tokens, 'src: 'tokens, I>() 
+    -> impl Parser<'tokens, I,lang_ast::Module, 
+    extra::Err<Rich<'tokens, (Token<'src>, SimpleSpan)>>
+>
+where
+    I: ValueInput<
+        'tokens,
+        Token = (Token<'src>, SimpleSpan),
+        Span = SimpleSpan,
+    >,
+{
+    recursive(|module| {
 
-    /*
-        <function_body> ::= <statement>* [ <function_return> ]
-    */
-    let function_body = statement()
+        recursive(|statement| {
+
+
+
+            // still incomplete, as requested
+            choice((
+                function.map(lang_ast::Statement::Function),
+                // assignment,
+                // expression,
+            ))
+        })
         .repeated()
-        .collect::<Vec<lang_ast::Statement>>();
+        .map(lang_ast::Module {
+            name: "main".to_string(),
+            statements: vec![],
+        })
+    })
+}
+                */
+
+
 
     /*
-        <param> ::= IDENTIFIER [ ":" <type> ]
+        <param> ::= IDENTIFIER [ ":" IDENTIFIER ]
+    */
+
+    /*
         <param_list> ::= "(" [ <param> ( "," <param> )* [ "," ] ] ")"
+    let param_list = just(Token::LParen)
+        .ignore_then(
+            param
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .or_not()
+        )
+        .then_ignore(just(Token::RParen))
+        .map(|params| params.unwrap_or_default());
     */
 
-    /*
-        <function_decl> ::= "fn" IDENTIFIER <param_list> "->" <type> ":"
-    */
-    let function_decl = just(lang_token::Function)
-        .ignore_then(parameter()
-            .repeated()
-            .delimited_by(just('('), just(')')))
-        .map(lang_ast::FunctionDecl {
 
-        })
+        /*
+            <function_body> ::= [ IDENTIFIER ] INDENT <statement>* DEDENT
+        let function_body = ident
+            .or_not()
+            .then_ignore(just(Token::Indent))
+            .then(statement.clone().repeated())
+            .then_ignore(just(Token::Dedent))
+            .map(|(ftype, statements)| {
+                (
+                    ftype.unwrap_or(lang_ast::DataType::Implicit),
+                    statements,
+                )
+            });
+        */
 
-    /*
-        <function> ::= <function_decl> <indent> <function_body> <dedent>
-    */
-    let function = function_decl()
-        .then(function_body())
-        .map(|decl, body| lang_ast::Function {
-            function_decl: decl,
-            body: body,
-        });
-
-    any()
-        .map(|s| {
-            lang_ast::AST {
-                main: lang_ast::Function {
-                    function_decl: lang_ast::FunctionDecl {
-                        name: lang_ast::Symbol { name: "main".to_string() },
-                        inputs: vec![],
-                        outputs: vec![],
-                    },
-                    body: vec![],
+        /*
+            <function> ::= IDENTIFIER "=" <param_list> "=>" <function_body>
+        let function = just(Token::Identifier)
+            .then_ignore(just(Token::Assignment))
+            .then(param_list)
+            .then_ignore(just(Token::RArrow))
+            .then(function_body)
+            .map(|((name, params), (out_type, body))| {
+                lang_ast::Function {
+                    name,
+                    params,
+                    out_type,
+                    body,
                 }
-            }
-        })
-}
-/*
-pub fn parse (tokens: &Vec<Token>) -> ParserArtifacts {
+            });
+        */
 
-    
-    let mut ast = lang_ast::AST {
-        main: lang_ast::Function {
-            function_decl: lang_ast::FunctionDecl {
-                name: lang_ast::Symbol { name: "main".to_string() },
-                inputs: vec![],
-                outputs: vec![],
-            },
-            body: function().,
-        }
-    };
 
-    ParserArtifacts {
-        ast,
-        errors: 5,
-    }
-}
 
-fn function<'a>() -> Parser<'a, Function> {
-    function_decl()
-        .then(function_body())
-        .map(|(function_decl, function_body)| Function { function_decl, function_body })
-        .boxed()
-}
-
-fn function_body<'a>() -> Parser<'a, Vec<Statement> {
-    statement()
-        .repeated()
-        .delimited_by(just(Token::LBrace), just(Token::RBrace))
-        .boxed()
-}
-
-fn statement<'a>() -> Parser<'a, Statement> {
-
-}
-*/
-
-/*
-
-fn parse_function_body (tokens: &Vec<Token>, mut curr_token: usize) 
--> (Vec<lang_ast::Statement>, usize) {
-    
-    let mut function_body = Vec::<lang_ast::Statement>::new();
-
-    while curr_token < tokens.len() {
-        match tokens[curr_token] {
-            Token::Function => {
-                let (function, new_curr_token) = parse_function(tokens, curr_token);
-                curr_token = new_curr_token;
-                function_body.push(lang_ast::Statement::Function(function));
-            }
-            Token::Let => {
-                let (assignment, new_curr_token) = parse_assignment(tokens, curr_token);
-                curr_token = new_curr_token;
-                function_body.push(lang_ast::Statement::Assignment(assignment));
-                
-            }
-            Token::Print => {
-                curr_token += 1;
-                if let Token::Identifier(identifier) = &tokens[curr_token] {
-                    function_body.push(lang_ast::Statement::Print(
-                        lang_ast::Symbol { name: identifier.to_string() },
-                    ));
-                }
-                else {
-                    // Parser error
-                }
-                curr_token += 1;
-            }
-            _ => {
-                curr_token+=1;
-            }
-        }
-    }
-
-    (function_body, curr_token)
-}
-
-fn parse_function (tokens: &Vec<Token>, mut curr_token:  usize) 
--> (lang_ast::Function, usize) {
-
-    let (function_decl, curr_token) = parse_function_decl(tokens, curr_token);
-    let (body, curr_token) = parse_function_body(tokens, curr_token);
-    
-    (
-        lang_ast::Function {
-            function_decl,
-            body,
-        },
-        curr_token,
-    )
-}
-
-fn parse_function_decl (tokens: &Vec<Token>, curr_token: usize) 
--> (lang_ast::FunctionDecl, usize) {
-
-    (
-        lang_ast::FunctionDecl {
-            name: lang_ast::Symbol { name: "fn".to_string() },
-            inputs: Vec::new(),
-            outputs: Vec::new(),
-        }, 
-        4
-    )
-}
-
-fn parse_assignment (tokens: &Vec<Token>, mut curr_token:  usize) 
--> (lang_ast::Assignment, usize) {
-
-    curr_token += 1;
-    let (lhs, mut curr_token) = parse_assignment_lhs(tokens, curr_token);
-    
-    if !matches!(tokens[curr_token], Token::Assignment) {
-
-    }
-    curr_token += 1;
-    
-    let (rhs, curr_token) = parse_assignment_rhs(tokens, curr_token);
-    
-    (
-        lang_ast::Assignment {
-            lhs,
-            rhs,
-        },
-        curr_token,
-    )
-}
-
-fn parse_assignment_lhs (tokens: &Vec<Token>, mut curr_token:  usize) 
--> (Vec<lang_ast::Symbol>, usize) {
-
-    let mut lhs = Vec::new();
-    while !matches!(tokens[curr_token], Token::Assignment) {
-        if let Token::Identifier(identifier) = &tokens[curr_token] {
-            lhs.push(lang_ast::Symbol {
-                name: identifier.to_string(),
-            })
-        }
-        else {
-            // Parser error
-        }
-        curr_token += 1;
-    }
-    
-    (lhs, curr_token)
-}
-
-fn parse_assignment_rhs (tokens: &Vec<Token>, mut curr_token:  usize) 
--> (lang_ast::Expression, usize) {
-
-    parse_expression(tokens, curr_token)
-}
-
-fn parse_expression (tokens: &Vec<Token>, mut curr_token:  usize) 
--> (lang_ast::Expression, usize) {
-    
-    let mut sub_expressions = Vec::new();
-
-    use lang_lexer::Token as Token;
-    while !matches!(tokens[curr_token], Token::Newline) {
-        match tokens[curr_token] {
-
-            /* 
-                Identifier(expression)
-                | identifier[expression]
-                | identifier
-            */
-            Token::Identifier(identifier) => {
-                /* 
-                    Function call
-                */
-                if matches!(tokens[curr_token+1], Token::Lparen) {
-                    let (sub_expression, new_curr_token) = parse_fn_call(tokens, curr_token);
-                    curr_token = new_curr_token;
-                    sub_expressions.push(sub_expression);
-                }
-                /* 
-                    Container indexing
-                */
-                else if matches!(tokens[curr_token+1],) {
-                    let (sub_expression, new_curr_token) = parse_index(tokens, curr_token);
-                    curr_token = new_curr_token;
-                    sub_expressions.push(sub_expression);
-                }
-                /* 
-                    Variable
-                */
-                else {
-                    sub_expressions.push(lang_ast::Variable(identifier));
-                    curr_token+=1;
-                }
-            }
-            Token::Integer(integer) => {
-                sub_expressions.push(
-                    lang_ast::Expression::Constant(
-                        lang_ast::Constant::Integer(integer)
-                    )
-                );
-                curr_token+=1;
-            }
-            Token::Float(float) => {
-                sub_expressions.push(
-                    lang_ast::Expression::Constant(
-                        lang_ast::Constant::Float(float)
-                    )
-                );
-                curr_token+=1;
-            }
-
-            Token::Plus => {
-                let rhs, new_curr_token = parse_expression
-                curr_token
-                return lang_ast::BinaryExpression {
-                    lhs: sub_expression[0],
-                    rhs
-                }
-            }
-
-            _ => {
-
-            }
-        }
-    }
-    
-
-    let expression = match tokens[curr_token] {
-        Token::Integer(integer) => {
-            lang_ast::Expression::Constant(
-                lang_ast::Constant::Integer(integer)
-            )
-        }
-        _ => {
-            lang_ast::Expression::Constant(
-                lang_ast::Constant::Integer(5)
-            )
-        }
-    };
-    curr_token += 1;
-    (expression, curr_token)
-}
-*/
