@@ -1,6 +1,84 @@
 
 use logos::Logos;
 
+/*
+    Reserved identifiers (keywords):
+        Loops:
+            for
+            in
+            while
+            break
+            continue
+
+        Conditionals:
+            if
+            then
+            else
+            match
+
+        Logical operators:
+            not
+            and
+            or
+
+        Boolean values:
+            true
+            false
+
+        Imports:
+            import
+            from
+            as
+
+        Functions:
+            return
+            defer
+
+        Modifiers:
+            pub
+            mut
+            with
+
+
+    Reserved tokens:
+        Operators:
+            Logical operators:
+                ==
+                !=
+                ||
+                &&
+                >
+                <
+                >=
+                <=
+                !
+            Arithmetic operators:
+                +
+                -
+                *
+                /
+                %
+                **
+            Assignment operators:
+                =
+                +=
+                -=
+                *=
+                /=
+                %=
+                **=
+        Syntax markers:
+        $
+
+        "
+        =>
+        {
+        }
+        |
+        &
+        ^
+ */
+
 #[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(error = LexingError)]
 pub enum Token {
@@ -91,6 +169,9 @@ pub enum Token {
 
     #[token(">")]
     Gt,
+
+    #[token("$")]
+    DollarSign,
 
 
     // Whitespace (all spaces/tabs)

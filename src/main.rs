@@ -4,6 +4,7 @@ mod parser;
 
 use crate::lexer::{lang_lexer, lang_token};
 use crate::parser::lang_parser;
+use crate::parser::print_ast::print_ast;
 
 use std::fs;
 
@@ -55,7 +56,7 @@ fn main () {
         }
     }
 
-    println!("{:?}", ast);
+    print_ast(&ast);
 
     /*
     }

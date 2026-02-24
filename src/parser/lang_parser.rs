@@ -46,6 +46,12 @@ impl TokenStream {
     pub fn backtrack(&mut self) {
         self.pos = self.save_pos;
     }
+
+    pub fn skip_newlines(&mut self) {
+        while matches!(self.peek(1), Some((Token::Newline, _))) {
+            self.next(1);
+        }
+    }
 }
 
 pub fn parse_module(tokens: &Vec<(Token, Span)>, name: &String) -> ParsingArtifacts {
@@ -85,7 +91,9 @@ pub fn parse_module(tokens: &Vec<(Token, Span)>, name: &String) -> ParsingArtifa
         | return
         | import
 */
-fn parse_statement(token_stream: &mut TokenStream) -> Result<lang_ast::Statement, ParsingError> {
+pub fn parse_statement(token_stream: &mut TokenStream) -> Result<lang_ast::Statement, ParsingError> {
+
+    token_stream.skip_newlines();
 
     let mut save_pos = token_stream.pos;
     match parse_assignment(token_stream) {
@@ -103,9 +111,25 @@ fn parse_statement(token_stream: &mut TokenStream) -> Result<lang_ast::Statement
             return Ok(lang_ast::Statement::Expression(expression));
         }
         Err(error) => {
-            token_stream.pos = save_pos;
+            println!("{:?}", error);
         }
     }
+
+    /*
+    match token_stream.peek(1) {
+        Some((Token::Newline, _)) => {
+            token_stream.next(1);
+        }
+        Some((Token::Dedent, _)) | None => {
+            // ok — block ending or EOF
+        }
+        _ => {
+            return Err(ParsingError {
+                message: "Expected newline after statement".to_string(),
+            });
+        }
+    }
+    */
 
     Err(ParsingError {message: "Parsing error".to_string()})
 }
@@ -140,146 +164,3 @@ fn parse_assignment(token_stream: &mut TokenStream) -> Result<lang_ast::Assignme
 
     Err(ParsingError {message: "Parsing error".to_string()})
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    /*
-        <loop> ::= <for_loop> | <while_loop>
-    */
-
-    /*
-        <branch> ::= <expression> ":" <indent> (<statement>)* <dedent>
-        <conditional> ::= "if" <branch> ( "else" "if" <branch> )* [ "else" <branch> ]
-    */
-
-    /*
-        <assignment> ::= [ "mut" ] IDENTIFIER ( "," [ "mut" ] IDENTIFIER )* "=" <expression>
-    */
-
-            /*
-pub fn parser<'tokens, 'src: 'tokens, I>() 
-    -> impl Parser<'tokens, I,lang_ast::Module, 
-    extra::Err<Rich<'tokens, (Token<'src>, SimpleSpan)>>
->
-where
-    I: ValueInput<
-        'tokens,
-        Token = (Token<'src>, SimpleSpan),
-        Span = SimpleSpan,
-    >,
-{
-    recursive(|module| {
-
-        recursive(|statement| {
-
-
-
-            // still incomplete, as requested
-            choice((
-                function.map(lang_ast::Statement::Function),
-                // assignment,
-                // expression,
-            ))
-        })
-        .repeated()
-        .map(lang_ast::Module {
-            name: "main".to_string(),
-            statements: vec![],
-        })
-    })
-}
-                */
-
-
-
-    /*
-        <param> ::= IDENTIFIER [ ":" IDENTIFIER ]
-    */
-
-    /*
-        <param_list> ::= "(" [ <param> ( "," <param> )* [ "," ] ] ")"
-    let param_list = just(Token::LParen)
-        .ignore_then(
-            param
-                .separated_by(just(Token::Comma))
-                .allow_trailing()
-                .or_not()
-        )
-        .then_ignore(just(Token::RParen))
-        .map(|params| params.unwrap_or_default());
-    */
-
-
-        /*
-            <function_body> ::= [ IDENTIFIER ] INDENT <statement>* DEDENT
-        let function_body = ident
-            .or_not()
-            .then_ignore(just(Token::Indent))
-            .then(statement.clone().repeated())
-            .then_ignore(just(Token::Dedent))
-            .map(|(ftype, statements)| {
-                (
-                    ftype.unwrap_or(lang_ast::DataType::Implicit),
-                    statements,
-                )
-            });
-        */
-
-        /*
-            <function> ::= IDENTIFIER "=" <param_list> "=>" <function_body>
-        let function = just(Token::Identifier)
-            .then_ignore(just(Token::Assignment))
-            .then(param_list)
-            .then_ignore(just(Token::RArrow))
-            .then(function_body)
-            .map(|((name, params), (out_type, body))| {
-                lang_ast::Function {
-                    name,
-                    params,
-                    out_type,
-                    body,
-                }
-            });
-        */
-
-
-
