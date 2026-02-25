@@ -1,88 +1,86 @@
-
 use logos::Logos;
 
 /*
-    Reserved identifiers (keywords):
-        Loops:
-            for
-            in
-            while
-            break
-            continue
+   Reserved identifiers (keywords):
+       Loops:
+           for
+           in
+           while
+           break
+           continue
 
-        Conditionals:
-            if
-            then
-            else
-            match
+       Conditionals:
+           if
+           then
+           else
+           match
 
-        Logical operators:
-            not
-            and
-            or
+       Logical operators:
+           not
+           and
+           or
 
-        Boolean values:
-            true
-            false
+       Boolean values:
+           true
+           false
 
-        Imports:
-            import
-            from
-            as
+       Imports:
+           import
+           from
+           as
 
-        Functions:
-            return
-            defer
+       Functions:
+           return
+           defer
 
-        Modifiers:
-            pub
-            mut
-            with
+       Modifiers:
+           pub
+           mut
+           with
 
 
-    Reserved tokens:
-        Operators:
-            Logical operators:
-                ==
-                !=
-                ||
-                &&
-                >
-                <
-                >=
-                <=
-                !
-            Arithmetic operators:
-                +
-                -
-                *
-                /
-                %
-                **
-            Assignment operators:
-                =
-                +=
-                -=
-                *=
-                /=
-                %=
-                **=
-        Syntax markers:
-        $
+   Reserved tokens:
+       Operators:
+           Logical operators:
+               ==
+               !=
+               ||
+               &&
+               >
+               <
+               >=
+               <=
+               !
+           Arithmetic operators:
+               +
+               -
+               *
+               /
+               %
+               **
+           Assignment operators:
+               =
+               +=
+               -=
+               *=
+               /=
+               %=
+               **=
+       Syntax markers:
+       $
 
-        "
-        =>
-        {
-        }
-        |
-        &
-        ^
- */
+       "
+       =>
+       {
+       }
+       |
+       &
+       ^
+*/
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(error = LexingError)]
 pub enum Token {
-
     // Keywords
     #[token("for")]
     For,
@@ -105,10 +103,10 @@ pub enum Token {
     #[token("\n")]
     #[token(";")]
     Newline,
-    
+
     #[token("==")]
     EqEq,
-    
+
     #[token("!=")]
     NotEq,
 
@@ -123,7 +121,6 @@ pub enum Token {
 
     #[regex(r#"'([^'\\]|\\.)*'"#, parse_string)]
     SingleQuotedString(String),
-
 
     // Identifiers
     #[regex("[a-zA-Z_][a-zA-Z0-9_]*", |lex| String::from(lex.slice()))]
@@ -173,7 +170,6 @@ pub enum Token {
     #[token("$")]
     DollarSign,
 
-
     // Whitespace (all spaces/tabs)
     #[regex(r"[ \t]+", logos::skip)]
     Whitespace,
@@ -190,19 +186,19 @@ pub enum Token {
 pub enum LexingError {
     NumberParseError,
     #[default]
-    Other
+    Other,
 }
 
 impl From<std::num::ParseIntError> for LexingError {
-   fn from(_: std::num::ParseIntError) -> Self {
-      LexingError::NumberParseError
-  }
+    fn from(_: std::num::ParseIntError) -> Self {
+        LexingError::NumberParseError
+    }
 }
 
 impl From<std::num::ParseFloatError> for LexingError {
-  fn from(_: std::num::ParseFloatError) -> Self {
-     LexingError::NumberParseError
-  }
+    fn from(_: std::num::ParseFloatError) -> Self {
+        LexingError::NumberParseError
+    }
 }
 
 fn parse_string(lex: &mut logos::Lexer<Token>) -> String {

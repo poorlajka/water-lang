@@ -1,4 +1,3 @@
-
 mod lexer;
 mod parser;
 
@@ -8,10 +7,9 @@ use crate::parser::print_ast::print_ast;
 
 use std::fs;
 
-fn main () {
-
+fn main() {
     /*
-        Read code 
+        Read code
     */
     let code = match fs::read_to_string("program.txt") {
         Ok(code) => code,
@@ -24,11 +22,7 @@ fn main () {
     /*
         Tokenize code
     */
-    let lang_lexer::LexingArtifacts {
-        tokens,
-        errors,
-    } = lang_lexer::tokenize(&code);
-
+    let lang_lexer::LexingArtifacts { tokens, errors } = lang_lexer::tokenize(&code);
 
     if !errors.is_empty() {
         for error in &errors {
@@ -43,12 +37,10 @@ fn main () {
 
     /*
         Parse tokens
-    
+
     */
-    let lang_parser::ParsingArtifacts {
-        ast,
-        errors,
-    } = lang_parser::parse_module(&tokens, &"main".to_string());
+    let lang_parser::ParsingArtifacts { ast, errors } =
+        lang_parser::parse_module(&tokens, &"main".to_string());
 
     if !errors.is_empty() {
         for error in errors {
@@ -62,16 +54,15 @@ fn main () {
     }
         */
 
+    /*
+            Compile AST to bytecode
 
-    /*  
-        Compile AST to bytecode
-    
-    let lang_compiler::CompilerArtifacts {
-        bytecode,
-        errors,
-    } = lang_compiler::compile(&ast);
-*/
-    /*  
+        let lang_compiler::CompilerArtifacts {
+            bytecode,
+            errors,
+        } = lang_compiler::compile(&ast);
+    */
+    /*
         Execute bytecode
     */
     //let exit_status = lang_vm::exec(&bytecode);

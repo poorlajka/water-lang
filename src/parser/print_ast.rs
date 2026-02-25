@@ -1,7 +1,6 @@
-use crate::parser::lang_ast::{Expression, Statement, BinaryOp, Module, Assignment, Function};
+use crate::parser::lang_ast::{BinaryOp, Expression, Module, Pattern, Statement};
 
 pub fn print_ast(module: &Module) {
-
     println!("\nModule: {}", module.name);
     for statement in &module.statements {
         print_statement(&statement, "", true);
@@ -13,6 +12,16 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
     print!("{prefix}{connector}");
 
     match expr {
+        Expression::Assignment { lhs, rhs } => {
+            println!("Assignment");
+
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+
+            if let Pattern::Identifier(lhs) = lhs {
+                print_expression(&Expression::Variable(lhs.to_string()), &new_prefix, false);
+                print_expression(rhs, &new_prefix, true);
+            }
+        }
         Expression::Integer(i) => {
             println!("Integer({})", i);
         }
@@ -38,7 +47,10 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
             print_expression(rhs, &new_prefix, true);
         }
 
-        Expression::Block { statements, final_expr } => {
+        Expression::Block {
+            statements,
+            final_expr,
+        } => {
             println!("Block");
 
             let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
@@ -53,7 +65,11 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
             }
         }
 
-        Expression::Conditional { condition, then_branch, else_branch } => {
+        Expression::Conditional {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
             println!("If");
 
             let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
@@ -65,12 +81,9 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
                 print_expression(else_expr, &new_prefix, true);
             }
         }
-        Expression::FunctionCall(_) => {
-
-        }
-        Expression::Unary{..} => {
-
-        }
+        Expression::FunctionCall { .. } => {}
+        Expression::Unary { .. } => {}
+        _ => {}
     }
 }
 
@@ -84,17 +97,7 @@ fn print_statement(stmt: &Statement, prefix: &str, is_last: bool) {
             let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
             print_expression(expr, &new_prefix, true);
         }
-        Statement::Assignment( Assignment {lhs, rhs}) => {
-            println!("Assignment");
-
-            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
-
-            print_expression(&Expression::Variable(lhs.to_string()), &new_prefix, false);
-            print_expression(rhs, &new_prefix, true);
-
-        }
-        Statement::Function(_) => {
-
-        }
+        Statement::Expression(Expression::Function { .. }) => {}
+        _ => {}
     }
 }

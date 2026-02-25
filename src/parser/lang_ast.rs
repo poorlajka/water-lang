@@ -8,7 +8,7 @@ pub struct Spanned<T> {
 
 #[derive(Debug, Clone)]
 pub struct Program {
-    pub modules: Vec<Module>
+    pub modules: Vec<Module>,
 }
 
 #[derive(Debug, Clone)]
@@ -16,7 +16,6 @@ pub struct Module {
     pub name: String,
     pub statements: Vec<Statement>,
 }
-
 
 #[derive(Debug, Clone)]
 pub enum Statement {
@@ -32,9 +31,16 @@ pub enum Expression {
     Float(f64),
     String(String),
     Variable(String),
-    Assignment(Assignment),
-    Function(Function),
-    FunctionCall(FunctionCall),
+    Tuple(Vec<Expression>),
+    Assignment {
+        lhs: Pattern,
+        rhs: Box<Expression>,
+    },
+    Function {
+        signature: FunctionSignature,
+        body: Vec<Statement>,
+    },
+    FunctionCall {},
     Unary {
         op: UnaryOp,
         expression: Box<Expression>,
@@ -52,7 +58,22 @@ pub enum Expression {
     Block {
         statements: Vec<Statement>,
         final_expr: Option<Box<Expression>>,
-    }
+    },
+    Array(Vec<Expression>),
+    Index {
+        target: Box<Expression>,
+        index: Box<Expression>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum Pattern {
+    Identifier(String),
+    Tuple(Vec<Pattern>),
+    // future:
+    // Wildcard,
+    // StructPattern { ... },
+    // List(Vec<Pattern>),
 }
 
 #[derive(Debug, Clone)]
@@ -70,19 +91,14 @@ pub enum BinaryOp {
     Lt,
     Gt,
     Eq,
-}
-
-#[derive(Debug, Clone)]
-pub struct Function {
-    pub signature: FunctionSignature,
-    pub body: Vec<Statement>,
+    Assign,
 }
 
 #[derive(Debug, Clone)]
 pub struct FunctionSignature {
     pub name: String,
     pub args: Vec<Parameter>,
-    pub output: DataType, 
+    pub output: DataType,
 }
 
 #[derive(Debug, Clone)]
@@ -97,20 +113,3 @@ pub enum DataType {
     Struct,
     Implicit,
 }
-
-#[derive(Debug, Clone)]
-pub struct Assignment {
-    pub lhs: String,
-    pub rhs: Expression,
-}
-
-#[derive(Debug, Clone)]
-pub struct FunctionCall {
-}
-
-
-
-
-
-
-

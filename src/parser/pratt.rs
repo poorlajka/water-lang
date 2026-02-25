@@ -1,28 +1,19 @@
 use crate::lexer::lang_token::{self, Token};
-use logos::Span;
 use crate::parser::lang_ast;
-use crate::parser::lang_parser::{
-    TokenStream,
-    ParsingError,
-    parse_statement,
-};
+use crate::parser::lang_ast::{BinaryOp, Expression, Pattern, Statement};
+use crate::parser::lang_parser::{parse_statement, ParsingError, TokenStream};
+use logos::Span;
 
-fn parse_block(token_stream: &mut TokenStream)
-    -> Result<lang_ast::Expression, ParsingError>
-{
+fn parse_block(token_stream: &mut TokenStream) -> Result<Expression, ParsingError> {
+    token_stream.skip_newlines();
+    token_stream.expect(Token::Indent)?;
+
     let mut statements = Vec::new();
-
-    if !matches!(token_stream.next(1), Some((Token::Indent, _))) {
-        return Err(ParsingError {
-            message: "Expected block".to_string(),
-        });
-    }
-
     loop {
         token_stream.skip_newlines();
-        match token_stream.peek(1) {
+        match token_stream.peek() {
             Some((Token::Dedent, _)) | None => {
-                token_stream.next(1); // consume }
+                token_stream.next(); // consume }
                 break;
             }
             Some((t, span)) => {
@@ -32,153 +23,154 @@ fn parse_block(token_stream: &mut TokenStream)
         }
     }
 
-    let final_expr = match statements.last() {
-        Some(lang_ast::Statement::Expression(expression)) => {
-            Some(Box::new(expression.clone()))
-        }
-        _ => None,
+    let final_expr = if let Some(Statement::Expression(expr)) = statements.pop() {
+        Some(Box::new(expr))
+    } else {
+        None
     };
 
-    Ok(lang_ast::Expression::Block {
+    Ok(Expression::Block {
         statements,
         final_expr,
     })
 }
 
-fn parse_conditional(token_stream: &mut TokenStream) -> Result<lang_ast::Expression, ParsingError>{
+fn parse_conditional(token_stream: &mut TokenStream) -> Result<Expression, ParsingError> {
     let condition = parse_expression(token_stream, 0)?;
 
-    token_stream.skip_newlines();
-    let then_branch = match token_stream.peek(1) {
-        Some((Token::Then, span)) => { 
-            parse_expression(token_stream, 0)?
-        }
-        _ => {
-            parse_block(token_stream)?
-        }
+    let then_branch = match token_stream.peek() {
+        Some((Token::Then, span)) => parse_expression(token_stream, 0)?,
+        _ => parse_block(token_stream)?,
     };
 
-    token_stream.skip_newlines();
-    let else_branch = match token_stream.peek(1) {
+    let else_branch = match token_stream.peek() {
         Some((Token::Else, span)) => {
-            token_stream.next(1);
-            token_stream.skip_newlines();
-            if let Ok(block) = parse_block(token_stream) {
-                Some(block)
-            }
-            else if let Ok(expr) = parse_expression(token_stream, 0) {
-                Some(expr)
-            }
-            else {
-                None
+            token_stream.next();
+            if matches!(token_stream.peek(), Some((Token::Indent, _))) {
+                Some(parse_block(token_stream)?)
+            } else {
+                Some(parse_expression(token_stream, 0)?)
             }
         }
         _ => None,
     };
 
-    Ok(lang_ast::Expression::Conditional { 
-        condition: Box::new(condition), 
-        then_branch: Box::new(then_branch), 
+    Ok(Expression::Conditional {
+        condition: Box::new(condition),
+        then_branch: Box::new(then_branch),
         else_branch: Box::new(else_branch),
     })
 }
 
-fn parse_prefix(token_stream: &mut TokenStream) -> Result<lang_ast::Expression, ParsingError> {
+fn convert_expr_to_pattern(expr: Expression) -> Result<Pattern, ParsingError> {
+    match expr {
+        Expression::Variable(name) => Ok(Pattern::Identifier(name)),
 
-    token_stream.skip_newlines();
-    match token_stream.next(1) {
-        Some((Token::If, _span)) => {
-            parse_conditional(token_stream)
+        Expression::Tuple(elements) => {
+            let mut patterns = Vec::new();
+
+            for element in elements {
+                patterns.push(convert_expr_to_pattern(element)?);
+            }
+
+            Ok(Pattern::Tuple(patterns))
         }
-        Some((Token::Integer(i), _span)) => {
-            Ok(lang_ast::Expression::Integer(i))
-        }
-        Some((Token::Float(f), _span)) => {
-            Ok(lang_ast::Expression::Float(f))
-        }
-        Some((Token::DoubleQuotedString(s), _span)) => {
-            Ok(lang_ast::Expression::String(s))
-        }
-        Some((Token::Identifier(i), _span)) => {
-            Ok(lang_ast::Expression::Variable(i))
-        }
+
+        _ => Err(ParsingError {
+            message: "Invalid assignment target".into(),
+        }),
+    }
+}
+
+fn parse_prefix(token_stream: &mut TokenStream) -> Result<Expression, ParsingError> {
+    match token_stream.next() {
+        Some((Token::If, _span)) => parse_conditional(token_stream),
+        Some((Token::Integer(i), _span)) => Ok(Expression::Integer(i)),
+        Some((Token::Float(f), _span)) => Ok(Expression::Float(f)),
+        Some((Token::DoubleQuotedString(s), _span)) => Ok(Expression::String(s)),
+        Some((Token::Identifier(i), _span)) => Ok(Expression::Variable(i)),
 
         Some((Token::LParen, _)) => {
             let expr = parse_expression(token_stream, 0)?;
 
-            match token_stream.next(1) {
+            match token_stream.next() {
                 Some((Token::RParen, _)) => Ok(expr),
 
-                Some((_token, span)) => {
-                    Err(ParsingError {message: "Expected ')'".to_string()})
-                }
+                Some((_token, span)) => Err(ParsingError {
+                    message: "Expected ')'".to_string(),
+                }),
 
-                None => {
-                    Err(ParsingError {message: "Unexpected end of input".to_string()})
-                }
+                None => Err(ParsingError {
+                    message: "Unexpected end of input".to_string(),
+                }),
             }
         }
 
-        Some((_token, span)) => {
-            Err(ParsingError {message: "Unexpected token in prefix".to_string()})
-        }
-        None => {
-            Err(ParsingError {message: "Unexpected end of input".to_string()})
-        }
+        Some((_token, span)) => Err(ParsingError {
+            message: "Unexpected token in prefix".to_string(),
+        }),
+        None => Err(ParsingError {
+            message: "Unexpected end of input".to_string(),
+        }),
     }
 }
 
-pub fn parse_expression(token_stream: &mut TokenStream, min_bp: u8) -> Result<lang_ast::Expression, ParsingError> {
-
-    token_stream.skip_newlines();
-
+pub fn parse_expression(
+    token_stream: &mut TokenStream,
+    min_bp: u8,
+) -> Result<Expression, ParsingError> {
     let mut lhs = parse_prefix(token_stream)?;
 
     loop {
-        token_stream.skip_newlines();
-        let op = match token_stream.peek(1) {
-            Some((token, _)) => token.clone(),
+        let op = match token_stream.peek() {
+            Some((token, _)) => token,
             None => break,
         };
 
-        let (left_bp, right_bp, bin_op) =
-            match infix_binding_power(&op) {
-                Some(info) => info,
-                None => break,
-            };
+        let (left_bp, right_bp, bin_op) = match infix_binding_power(&op) {
+            Some(info) => info,
+            None => break,
+        };
 
         if left_bp < min_bp {
             break;
         }
 
-        token_stream.next(1);
+        token_stream.next();
 
         let rhs = parse_expression(token_stream, right_bp)?;
 
-        lhs = lang_ast::Expression::Binary {
-            lhs: Box::new(lhs),
-            op: bin_op,
-            rhs: Box::new(rhs),
+        lhs = match bin_op {
+            BinaryOp::Assign => {
+                let pattern = convert_expr_to_pattern(lhs)?;
+                Expression::Assignment {
+                    lhs: pattern,
+                    rhs: Box::new(rhs),
+                }
+            }
+            _ => Expression::Binary {
+                lhs: Box::new(lhs),
+                op: bin_op,
+                rhs: Box::new(rhs),
+            },
         };
     }
 
     Ok(lhs)
 }
 
-fn infix_binding_power(tok: &Token) -> Option<(u8, u8, lang_ast::BinaryOp)> {
+fn infix_binding_power(tok: &Token) -> Option<(u8, u8, BinaryOp)> {
     match tok {
-        Token::Plus  => Some((10, 11, lang_ast::BinaryOp::Add)),
-        Token::Minus => Some((10, 11, lang_ast::BinaryOp::Sub)),
-        Token::Star  => Some((20, 21, lang_ast::BinaryOp::Mul)),
-        Token::Slash => Some((20, 21, lang_ast::BinaryOp::Div)),
+        Token::Plus => Some((10, 11, BinaryOp::Add)),
+        Token::Minus => Some((10, 11, BinaryOp::Sub)),
+        Token::Star => Some((20, 21, BinaryOp::Mul)),
+        Token::Slash => Some((20, 21, BinaryOp::Div)),
 
-        Token::Lt    => Some((5, 6, lang_ast::BinaryOp::Lt)),
-        Token::Gt    => Some((5, 6, lang_ast::BinaryOp::Gt)),
-        Token::EqEq  => Some((4, 5, lang_ast::BinaryOp::Eq)),
+        Token::Lt => Some((5, 6, BinaryOp::Lt)),
+        Token::Gt => Some((5, 6, BinaryOp::Gt)),
+        Token::EqEq => Some((4, 5, BinaryOp::Eq)),
+        Token::Eq => Some((1, 0, BinaryOp::Assign)),
 
         _ => None,
     }
 }
-
-
-
