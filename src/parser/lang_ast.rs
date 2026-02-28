@@ -1,15 +1,31 @@
 use logos::Span;
 
-#[derive(Debug, Clone)]
-pub struct Spanned<T> {
-    pub node: T,
-    pub span: Span,
-}
+use crate::parser::lang_parser::{ParsingError, TokenStream};
 
 #[derive(Debug, Clone)]
-pub struct Program {
-    pub modules: Vec<Module>,
+pub struct Node<T> {
+    pub id: usize,
+    pub span: Span,
+    pub kind: T,
 }
+
+impl<T> Node<T> {
+    pub fn new(id: usize, span: Span, kind: T) -> Self {
+        Self { id, span, kind }
+    }
+}
+
+pub fn span_from_to(start: Span, end: Span) -> Span {
+    start.start..end.end
+}
+
+pub fn span_from_to_node<T>(start: &Node<T>, end: &Node<T>) -> Span {
+    start.span.start..end.span.end
+}
+
+pub type Expr = Node<Expression>;
+pub type Stmt = Node<Statement>;
+pub type Pat = Node<Pattern>;
 
 #[derive(Debug, Clone)]
 pub struct Module {
@@ -19,7 +35,7 @@ pub struct Module {
 
 #[derive(Debug, Clone)]
 pub enum Statement {
-    Expression(Expression),
+    Expression(Expr),
     //Import(Import),
     //Return(Return),
     //ForLoop(ForLoop),
@@ -31,45 +47,79 @@ pub enum Expression {
     Float(f64),
     String(String),
     Variable(String),
-    Tuple(Vec<Expression>),
+    Tuple(Vec<Expr>),
+    Array(Vec<Expr>),
+
     Assignment {
-        lhs: Pattern,
-        rhs: Box<Expression>,
+        lhs: Pat,
+        rhs: Box<Expr>,
     },
+
     Function {
         signature: FunctionSignature,
         body: Vec<Statement>,
     },
-    FunctionCall {},
+
     Unary {
         op: UnaryOp,
-        expression: Box<Expression>,
+        expression: Box<Expr>,
     },
+
     Binary {
-        lhs: Box<Expression>,
+        lhs: Box<Expr>,
         op: BinaryOp,
-        rhs: Box<Expression>,
+        rhs: Box<Expr>,
     },
+
     Conditional {
-        condition: Box<Expression>,
-        then_branch: Box<Expression>,
-        else_branch: Box<Option<Expression>>,
+        condition: Box<Expr>,
+        then_branch: Box<Expr>,
+        else_branch: Option<Box<Expr>>,
     },
+
     Block {
         statements: Vec<Statement>,
-        final_expr: Option<Box<Expression>>,
+        final_expr: Option<Box<Expr>>,
     },
-    Array(Vec<Expression>),
+
     Index {
-        target: Box<Expression>,
-        index: Box<Expression>,
+        target: Box<Expr>,
+        index: Box<Expr>,
     },
+
+    FunctionCall {
+        callee: Box<Expr>,
+        arguments: Vec<Expr>,
+    },
+}
+
+impl Node<Expression> {
+    pub fn into_pattern(self) -> Result<Node<Pattern>, ParsingError> {
+        let Node { id, span, kind } = self;
+
+        let pattern_kind = match kind {
+            Expression::Variable(name) => Pattern::Identifier(name),
+
+            Expression::Tuple(elements) => Pattern::Tuple(
+                elements
+                    .into_iter()
+                    .map(|e| e.into_pattern())
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+
+            _ => {
+                return Err(ParsingError::new("Invalid assignment target", Some(span)));
+            }
+        };
+
+        Ok(Node::new(id, span, pattern_kind))
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum Pattern {
     Identifier(String),
-    Tuple(Vec<Pattern>),
+    Tuple(Vec<Pat>),
     // future:
     // Wildcard,
     // StructPattern { ... },
@@ -103,13 +153,12 @@ pub struct FunctionSignature {
 
 #[derive(Debug, Clone)]
 pub struct Parameter {
-    pub name: String,
+    pub binding: Pat,
     pub ptype: DataType,
 }
 
 #[derive(Debug, Clone)]
 pub enum DataType {
-    Enum,
-    Struct,
+    Identifier,
     Implicit,
 }

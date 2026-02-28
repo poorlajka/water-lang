@@ -17,9 +17,9 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
 
             let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
 
-            if let Pattern::Identifier(lhs) = lhs {
+            if let Pattern::Identifier(lhs) = &lhs.kind {
                 print_expression(&Expression::Variable(lhs.to_string()), &new_prefix, false);
-                print_expression(rhs, &new_prefix, true);
+                print_expression(&rhs.kind, &new_prefix, true);
             }
         }
         Expression::Integer(i) => {
@@ -43,8 +43,8 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
 
             let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
 
-            print_expression(lhs, &new_prefix, false);
-            print_expression(rhs, &new_prefix, true);
+            print_expression(&lhs.kind, &new_prefix, false);
+            print_expression(&rhs.kind, &new_prefix, true);
         }
 
         Expression::Block {
@@ -61,7 +61,7 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
             }
 
             if let Some(expr) = final_expr {
-                print_expression(expr, &new_prefix, true);
+                print_expression(&expr.kind, &new_prefix, true);
             }
         }
 
@@ -74,11 +74,11 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
 
             let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
 
-            print_expression(condition, &new_prefix, false);
-            print_expression(then_branch, &new_prefix, else_branch.is_none());
+            print_expression(&condition.kind, &new_prefix, false);
+            print_expression(&then_branch.kind, &new_prefix, else_branch.is_none());
 
-            if let Some(else_expr) = &**else_branch {
-                print_expression(else_expr, &new_prefix, true);
+            if let Some(else_expr) = &*else_branch {
+                print_expression(&else_expr.kind, &new_prefix, true);
             }
         }
         Expression::FunctionCall { .. } => {}
@@ -95,9 +95,8 @@ fn print_statement(stmt: &Statement, prefix: &str, is_last: bool) {
         Statement::Expression(expr) => {
             println!("Expression");
             let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
-            print_expression(expr, &new_prefix, true);
+            print_expression(&expr.kind, &new_prefix, true);
         }
-        Statement::Expression(Expression::Function { .. }) => {}
         _ => {}
     }
 }

@@ -1,5 +1,6 @@
 use crate::lexer::lang_token::Token;
 use crate::parser::lang_ast;
+use crate::parser::lang_ast::{Expression, Node, Statement};
 use crate::parser::pratt;
 use logos::Span;
 
@@ -11,6 +12,16 @@ pub struct ParsingArtifacts {
 #[derive(Debug)]
 pub struct ParsingError {
     pub message: String,
+    pub span: Option<Span>,
+}
+
+impl ParsingError {
+    pub fn new(message: &str, span: Option<Span>) -> Self {
+        Self {
+            message: message.into(),
+            span,
+        }
+    }
 }
 
 pub struct TokenStream {
@@ -18,6 +29,7 @@ pub struct TokenStream {
     pos: usize,
     save_pos: usize,
     group_depth: usize,
+    next_id: usize,
 }
 
 impl TokenStream {
@@ -52,14 +64,28 @@ impl TokenStream {
         }
     }
 
-    pub fn expect(&mut self, expected: Token) -> Result<(), ParsingError> {
+    pub fn expect(&mut self, expected: Token) -> Result<(Token, Span), ParsingError> {
         match self.next() {
-            Some((tok, _)) if tok == expected => Ok(()),
-            _ => Err(ParsingError {
-                message: format!("Expected {:?}", expected),
-            }),
+            Some((tok, span)) if tok == expected => Ok((tok, span)),
+            Some((_, span)) => Err(ParsingError::new(
+                &format!("Expected {:?}", expected),
+                Some(span),
+            )),
+            None => Err(ParsingError::new(&format!("Expected {:?}", expected), None)),
         }
     }
+
+    pub fn next_id(&mut self) -> usize {
+        let id = self.next_id;
+        self.next_id += 1;
+
+        id
+    }
+}
+
+pub fn create_node<T>(token_stream: &mut TokenStream, span: Span, kind: T) -> Node<T> {
+    let id = token_stream.next_id();
+    Node::<T>::new(id, span, kind)
 }
 
 pub fn parse_module(tokens: &Vec<(Token, Span)>, name: &String) -> ParsingArtifacts {
@@ -76,6 +102,7 @@ pub fn parse_module(tokens: &Vec<(Token, Span)>, name: &String) -> ParsingArtifa
         pos: 0,
         save_pos: 0,
         group_depth: 0,
+        next_id: 0,
     };
 
     while !token_stream.peek().is_none() {
@@ -95,21 +122,17 @@ pub fn parse_module(tokens: &Vec<(Token, Span)>, name: &String) -> ParsingArtifa
         | return
         | import
 */
-pub fn parse_statement(
-    token_stream: &mut TokenStream,
-) -> Result<lang_ast::Statement, ParsingError> {
+pub fn parse_statement(token_stream: &mut TokenStream) -> Result<Statement, ParsingError> {
     token_stream.skip_newlines();
-    let mut save_pos = token_stream.pos;
+    let save_pos = token_stream.pos;
     match pratt::parse_expression(token_stream, 0) {
         Ok(expression) => {
-            return Ok(lang_ast::Statement::Expression(expression));
+            return Ok(Statement::Expression(expression));
         }
         Err(error) => {
             println!("{:?}", error);
         }
     }
 
-    Err(ParsingError {
-        message: "Parsing error".to_string(),
-    })
+    Err(ParsingError::new("Parsing error", None))
 }
