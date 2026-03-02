@@ -1,8 +1,235 @@
 use crate::lexer::lang_token::{self, Token};
-use crate::parser::lang_ast::{self, span_from_to, span_from_to_node};
+use crate::parser::lang_ast::{self, FunctionSignature, UnaryOp, span_from_to, span_from_to_node};
 use crate::parser::lang_ast::{BinaryOp, Expr, Expression, Node, Pat, Pattern, Statement, Stmt};
 use crate::parser::lang_parser::{create_node, parse_statement, ParsingError, TokenStream};
 use logos::Span;
+
+pub fn parse_expression(
+    token_stream: &mut TokenStream,
+    min_bp: u8,
+) -> Result<Node<Expression>, ParsingError> {
+    let mut lhs = parse_prefix(token_stream)?;
+
+    loop {
+        if let Some(new_lhs) = parse_postfix(token_stream, &lhs)? {
+            lhs = new_lhs;
+            continue;
+        }
+
+        if let Some(new_lhs) = parse_infix(token_stream, &lhs, min_bp)? {
+            lhs = new_lhs;
+            continue;
+        }
+
+        break;
+    }
+
+    Ok(lhs)
+}
+
+fn infix_binding_power(tok: &Token) -> Option<(u8, u8, BinaryOp)> {
+    match tok {
+        Token::Plus => Some((10, 11, BinaryOp::Add)),
+        Token::Minus => Some((10, 11, BinaryOp::Sub)),
+        Token::Star => Some((20, 21, BinaryOp::Mul)),
+        Token::Slash => Some((20, 21, BinaryOp::Div)),
+
+        Token::Lt => Some((5, 6, BinaryOp::Lt)),
+        Token::Gt => Some((5, 6, BinaryOp::Gt)),
+        Token::EqEq => Some((4, 5, BinaryOp::Eq)),
+        Token::Eq => Some((1, 0, BinaryOp::Assign)),
+
+        _ => None,
+    }
+}
+
+fn parse_prefix(token_stream: &mut TokenStream) -> Result<Node<Expression>, ParsingError> {
+    match token_stream.next() {
+        Some((Token::Minus, op_span)) => {
+            parse_prefix_unary(token_stream, op_span, UnaryOp::Neg)
+        }
+        Some((Token::Bang, op_span)) => {
+            parse_prefix_unary(token_stream, op_span, UnaryOp::Not)
+        }
+        Some((Token::Integer(i), span)) => {
+            Ok(create_node(token_stream, span, Expression::Integer(i)))
+        }
+        Some((Token::Float(f), span)) => Ok(create_node(token_stream, span, Expression::Float(f))),
+        Some((Token::DoubleQuotedString(s), span)) => {
+            Ok(create_node(token_stream, span, Expression::String(s)))
+        }
+        Some((Token::Identifier(i), span)) => {
+            Ok(create_node(token_stream, span, Expression::Identifier(i)))
+        }
+        Some((Token::LBracket, start_span)) => parse_array(token_stream, start_span),
+        Some((Token::If, _span)) => parse_conditional(token_stream),
+        Some((Token::LParen, start_span)) => {
+            /*
+                Paren could mean either a grouping, a tuple, or a function
+            */
+
+            let expr = parse_paren_expr(token_stream, start_span.clone())?;
+
+            if matches!(token_stream.peek(), Some((Token::RArrow, _))) {
+                parse_lambda_after_paren(token_stream, expr, start_span)
+            } else {
+                Ok(expr)
+            }
+        }
+
+        Some((_, span)) => Err(ParsingError::new(
+            "Unexpected token {:?} in prefix",
+            Some(span),
+        )),
+        None => Err(ParsingError::new("Unexpected end of input", None)),
+    }
+}
+
+fn parse_prefix_unary(
+    token_stream: &mut TokenStream,
+    op_span: Span,
+    op: UnaryOp,
+) -> Result<Node<Expression>, ParsingError> {
+
+    // binding power for prefix operators
+    const PREFIX_BP: u8 = 30;
+
+    let rhs = parse_expression(token_stream, PREFIX_BP)?;
+
+    let span = span_from_to(op_span, rhs.span.clone());
+
+    Ok(create_node(
+        token_stream,
+        span,
+        Expression::Unary {
+            op,
+            expression: Box::new(rhs),
+        },
+    ))
+}
+
+fn parse_postfix(
+    token_stream: &mut TokenStream,
+    lhs: &Node<Expression>,
+) -> Result<Option<Node<Expression>>, ParsingError> {
+    match token_stream.peek() {
+        Some((Token::LBracket, _)) => {
+            // Indexing
+            token_stream.next(); // consume '['
+            let index_expr = parse_expression(token_stream, 0)?;
+
+            let end_span = match token_stream.next() {
+                Some((Token::RBracket, span)) => span,
+                Some((_, span)) => return Err(ParsingError::new("Expected ']'", Some(span))),
+                None => return Err(ParsingError::new("Unexpected EOF", None)),
+            };
+
+            let span = span_from_to_node(&lhs, &index_expr);
+
+            Ok(Some(create_node(
+                token_stream,
+                span,
+                Expression::Index {
+                    target: Box::new(lhs.clone()),
+                    index: Box::new(index_expr),
+                },
+            )))
+        }
+
+        Some((Token::LParen, _)) => {
+            // Function call
+            token_stream.next(); // consume '('
+            let mut args = Vec::new();
+
+            if !matches!(token_stream.peek(), Some((Token::RParen, _))) {
+                loop {
+                    args.push(parse_expression(token_stream, 0)?);
+                    match token_stream.peek() {
+                        Some((Token::Comma, _)) => {
+                            token_stream.next();
+                        }
+                        Some((Token::RParen, _)) => break,
+                        Some((_, span)) => {
+                            return Err(ParsingError::new("Expected ',' or ')'", Some(span)))
+                        }
+                        None => {
+                            return Err(ParsingError::new("Unexpected EOF in function call", None))
+                        }
+                    }
+                }
+            }
+
+            let end_span = match token_stream.next() {
+                Some((Token::RParen, span)) => span,
+                Some((_, span)) => return Err(ParsingError::new("Expected ')'", Some(span))),
+                None => return Err(ParsingError::new("Unexpected EOF in function call", None)),
+            };
+
+            let span = span_from_to_node(
+                &lhs,
+                &Node::new(0, end_span, Expression::Tuple(args.clone())),
+            ); // dummy node for span
+
+            Ok(Some(create_node(
+                token_stream,
+                span,
+                Expression::FunctionCall {
+                    callee: Box::new(lhs.clone()),
+                    arguments: args,
+                },
+            )))
+        }
+
+        _ => Ok(None), // No postfix operator found
+    }
+}
+
+fn parse_infix(
+    token_stream: &mut TokenStream,
+    lhs: &Node<Expression>,
+    min_bp: u8,
+) -> Result<Option<Node<Expression>>, ParsingError> {
+    let (left_bp, right_bp, bin_op) = match token_stream.peek() {
+        Some((tok, _)) => match infix_binding_power(&tok) {
+            Some(info) => info,
+            None => return Ok(None),
+        },
+        None => return Ok(None),
+    };
+
+    if left_bp < min_bp {
+        return Ok(None);
+    }
+
+    token_stream.next(); // consume operator
+    let rhs = parse_expression(token_stream, right_bp)?;
+    let span = span_from_to_node(&lhs, &rhs);
+
+    let new_lhs = match bin_op {
+        BinaryOp::Assign => {
+            let pattern = lhs.clone().into_pattern()?;
+            create_node(
+                token_stream,
+                span,
+                Expression::Assignment {
+                    lhs: pattern,
+                    rhs: Box::new(rhs),
+                },
+            )
+        }
+        _ => create_node(
+            token_stream,
+            span,
+            Expression::Binary {
+                lhs: Box::new(lhs.clone()),
+                op: bin_op,
+                rhs: Box::new(rhs),
+            },
+        ),
+    };
+
+    Ok(Some(new_lhs))
+}
 
 fn parse_block(token_stream: &mut TokenStream) -> Result<Node<Expression>, ParsingError> {
     token_stream.skip_newlines();
@@ -123,183 +350,77 @@ fn parse_array(
     }
 }
 
-fn parse_prefix(token_stream: &mut TokenStream) -> Result<Node<Expression>, ParsingError> {
-    match token_stream.next() {
-        Some((Token::If, _span)) => parse_conditional(token_stream),
-        Some((Token::Integer(i), span)) => {
-            Ok(create_node(token_stream, span, Expression::Integer(i)))
-        }
-        Some((Token::Float(f), span)) => Ok(create_node(token_stream, span, Expression::Float(f))),
-        Some((Token::DoubleQuotedString(s), span)) => {
-            Ok(create_node(token_stream, span, Expression::String(s)))
-        }
-        Some((Token::Identifier(i), span)) => {
-            Ok(create_node(token_stream, span, Expression::Variable(i)))
-        }
-        Some((Token::LBracket, start_span)) => parse_array(token_stream, start_span),
-        Some((Token::LParen, _)) => {
-            let expr = parse_expression(token_stream, 0)?;
-
-            match token_stream.next() {
-                Some((Token::RParen, _)) => Ok(expr),
-
-                Some((_token, span)) => Err(ParsingError::new("Expected ')'", Some(span))),
-
-                None => Err(ParsingError::new("Unexpected end of input", None)),
-            }
-        }
-
-        Some((_token, span)) => Err(ParsingError::new("Unexpected token in prefix", Some(span))),
-        None => Err(ParsingError::new("Unexpected end of input", None)),
-    }
-}
-
-pub fn parse_expression(
+fn parse_lambda_after_paren(
     token_stream: &mut TokenStream,
-    min_bp: u8,
+    params_expr: Node<Expression>,
+    start_span: Span,
 ) -> Result<Node<Expression>, ParsingError> {
-    let mut lhs = parse_prefix(token_stream)?;
+    token_stream.next(); // consume =>
 
-    loop {
-        // --- Postfix operators ---
-        match token_stream.peek() {
-            Some((Token::LBracket, _)) => {
-                // Indexing
-                token_stream.next(); // consume '['
-                let index_expr = parse_expression(token_stream, 0)?;
+    let return_type = parse_expression(token_stream, 0)?;
+    let body = parse_block(token_stream)?;
 
-                let end_span = match token_stream.next() {
-                    Some((Token::RBracket, span)) => span,
-                    Some((_, span)) => return Err(ParsingError::new("Expected ']'", Some(span))),
-                    None => return Err(ParsingError::new("Unexpected EOF", None)),
-                };
-
-                let span = span_from_to_node(&lhs, &index_expr);
-
-                lhs = create_node(
-                    token_stream,
-                    span,
-                    Expression::Index {
-                        target: Box::new(lhs),
-                        index: Box::new(index_expr),
-                    },
-                );
-
-                continue; // Postfix operator handled, re-check for chaining
-            }
-
-            Some((Token::LParen, _)) => {
-                // Function call
-                token_stream.next(); // consume '('
-                let mut args = Vec::new();
-
-                if !matches!(token_stream.peek(), Some((Token::RParen, _))) {
-                    loop {
-                        let arg = parse_expression(token_stream, 0)?;
-                        args.push(arg);
-
-                        match token_stream.peek() {
-                            Some((Token::Comma, _)) => {
-                                token_stream.next();
-                            }
-                            Some((Token::RParen, _)) => break,
-                            Some((_, span)) => {
-                                return Err(ParsingError::new("Expected ',' or ')'", Some(span)))
-                            }
-                            None => {
-                                return Err(ParsingError::new(
-                                    "Unexpected EOF in function call",
-                                    None,
-                                ))
-                            }
-                        }
-                    }
-                }
-
-                let end_span = match token_stream.next() {
-                    Some((Token::RParen, span)) => span,
-                    Some((_, span)) => return Err(ParsingError::new("Expected ')'", Some(span))),
-                    None => return Err(ParsingError::new("Unexpected EOF in function call", None)),
-                };
-
-                let span = span_from_to_node(
-                    &lhs,
-                    &Node::new(0, end_span, Expression::Tuple(args.clone())),
-                ); // dummy node for span
-
-                lhs = create_node(
-                    token_stream,
-                    span,
-                    Expression::FunctionCall {
-                        callee: Box::new(lhs),
-                        arguments: args,
-                    },
-                );
-
-                continue; // Postfix operator handled
-            }
-
-            _ => {}
+    // Convert params_expr into patterns
+    let params = match params_expr.kind {
+        Expression::Tuple(elements) => elements
+            .into_iter()
+            .map(Node::into_pattern)
+            .collect::<Result<Vec<_>, _>>()?,
+        Expression::Identifier(_) => {
+            vec![params_expr.into_pattern()?]
         }
-
-        let op = match token_stream.peek() {
-            Some((token, _)) => token,
-            None => break,
-        };
-
-        let (left_bp, right_bp, bin_op) = match infix_binding_power(&op) {
-            Some(info) => info,
-            None => break,
-        };
-
-        if left_bp < min_bp {
-            break;
+        _ => {
+            return Err(ParsingError::new(
+                "Invalid lambda parameter list",
+                Some(params_expr.span),
+            ));
         }
+    };
 
-        token_stream.next();
+    let span = span_from_to(start_span, body.span);
 
-        let rhs = parse_expression(token_stream, right_bp)?;
-        let span = span_from_to_node(&lhs, &rhs);
-
-        lhs = match bin_op {
-            BinaryOp::Assign => {
-                let pattern = lhs.into_pattern()?;
-                create_node(
-                    token_stream,
-                    span,
-                    Expression::Assignment {
-                        lhs: pattern,
-                        rhs: Box::new(rhs),
-                    },
-                )
-            }
-            _ => create_node(
-                token_stream,
-                span,
-                Expression::Binary {
-                    lhs: Box::new(lhs),
-                    op: bin_op,
-                    rhs: Box::new(rhs),
-                },
-            ),
-        };
-    }
-
-    Ok(lhs)
+    Ok(create_node(
+        token_stream,
+        span,
+        Expression::Function {
+            signature: FunctionSignature {
+                args: params,
+                return_type: Box::new(return_type),
+            },
+            body: Box::new(body),
+        },
+    ))
 }
 
-fn infix_binding_power(tok: &Token) -> Option<(u8, u8, BinaryOp)> {
-    match tok {
-        Token::Plus => Some((10, 11, BinaryOp::Add)),
-        Token::Minus => Some((10, 11, BinaryOp::Sub)),
-        Token::Star => Some((20, 21, BinaryOp::Mul)),
-        Token::Slash => Some((20, 21, BinaryOp::Div)),
+fn parse_paren_expr(
+    token_stream: &mut TokenStream,
+    start_span: Span,
+) -> Result<Node<Expression>, ParsingError> {
+    let mut elements = Vec::new();
 
-        Token::Lt => Some((5, 6, BinaryOp::Lt)),
-        Token::Gt => Some((5, 6, BinaryOp::Gt)),
-        Token::EqEq => Some((4, 5, BinaryOp::Eq)),
-        Token::Eq => Some((1, 0, BinaryOp::Assign)),
+    if matches!(token_stream.peek(), Some((Token::RParen, _))) {
+        let (_, end_span) = token_stream.next().unwrap();
+        let span = span_from_to(start_span, end_span);
+        return Ok(create_node(token_stream, span, Expression::Tuple(vec![])));
+    }
 
-        _ => None,
+    elements.push(parse_expression(token_stream, 0)?);
+
+    while matches!(token_stream.peek(), Some((Token::Comma, _))) {
+        token_stream.next();
+        elements.push(parse_expression(token_stream, 0)?);
+    }
+
+    let end_span = match token_stream.next() {
+        Some((Token::RParen, span)) => span,
+        _ => return Err(ParsingError::new("Expected ')'", None)),
+    };
+
+    let span = span_from_to(start_span, end_span);
+
+    if elements.len() == 1 {
+        Ok(elements.into_iter().next().unwrap())
+    } else {
+        Ok(create_node(token_stream, span, Expression::Tuple(elements)))
     }
 }

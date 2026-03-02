@@ -25,6 +25,26 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
         Expression::Integer(i) => {
             println!("Integer({})", i);
         }
+        Expression::Array(a) => {
+            println!("Array");
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+            for i in a {
+                print_expression(&i.kind, &new_prefix, is_last);
+            }
+        }
+        Expression::Tuple(a) => {
+            println!("Tuple");
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+            for i in a {
+                print_expression(&i.kind, &new_prefix, is_last);
+            }
+        }
+        Expression::Index { target, index } => {
+            println!("Index");
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+            print_expression(&target.kind, &new_prefix, false);
+            print_expression(&index.kind, &new_prefix, true);
+        }
 
         Expression::Float(f) => {
             println!("Float({})", f);
@@ -34,7 +54,7 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
             println!("String(\"{}\")", s);
         }
 
-        Expression::Variable(v) => {
+        Expression::Identifier(v) => {
             println!("Variable({})", v);
         }
 

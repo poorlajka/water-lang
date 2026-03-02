@@ -110,6 +110,9 @@ pub enum Token {
     #[token("!=")]
     NotEq,
 
+    #[token("!")]
+    Bang,
+
     #[token("=>")]
     RArrow,
 
