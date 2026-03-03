@@ -1,6 +1,6 @@
 use crate::lexer::lang_token::{self, Token};
 use crate::parser::lang_ast::{self, FunctionSignature, UnaryOp, span_from_to, span_from_to_node};
-use crate::parser::lang_ast::{BinaryOp, Expr, Expression, Node, Pat, Pattern, Statement, Stmt};
+use crate::parser::lang_ast::{BinaryOp, ExprNode, Expression, Node, PatNode, Pattern, Statement, StmtNode};
 use crate::parser::lang_parser::{create_node, parse_statement, ParsingError, TokenStream};
 use logos::Span;
 
@@ -34,9 +34,15 @@ fn infix_binding_power(tok: &Token) -> Option<(u8, u8, BinaryOp)> {
         Token::Star => Some((20, 21, BinaryOp::Mul)),
         Token::Slash => Some((20, 21, BinaryOp::Div)),
 
+        Token::And => Some((3, 4, BinaryOp::And)), 
+        Token::Or   => Some((2, 3, BinaryOp::Or)),
+
         Token::Lt => Some((5, 6, BinaryOp::Lt)),
         Token::Gt => Some((5, 6, BinaryOp::Gt)),
+        Token::LEq => Some((5, 6, BinaryOp::LEq)),
+        Token::GEq => Some((5, 6, BinaryOp::GEq)),
         Token::EqEq => Some((4, 5, BinaryOp::Eq)),
+        Token::NotEq => Some((4, 5, BinaryOp::NEq)),
         Token::Eq => Some((1, 0, BinaryOp::Assign)),
 
         _ => None,
@@ -384,7 +390,7 @@ fn parse_lambda_after_paren(
         span,
         Expression::Function {
             signature: FunctionSignature {
-                args: params,
+                args: create_node(token_stream, span, params,
                 return_type: Box::new(return_type),
             },
             body: Box::new(body),

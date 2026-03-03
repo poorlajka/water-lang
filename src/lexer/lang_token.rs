@@ -82,6 +82,14 @@ use logos::Logos;
 #[logos(error = LexingError)]
 pub enum Token {
     // Keywords
+    #[token("and")]
+    #[token("&&")]
+    And,
+
+    #[token("or")]
+    #[token("||")]
+    Or,
+
     #[token("for")]
     For,
 
@@ -167,11 +175,18 @@ pub enum Token {
     #[token("..")]
     Range,
 
+    #[token("<=")]
+    LEq,
+
+    #[token(">=")]
+    GEq,
+
     #[token("<")]
     Lt,
 
     #[token(">")]
     Gt,
+
 
     #[token("$")]
     DollarSign,

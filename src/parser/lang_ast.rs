@@ -130,6 +130,7 @@ pub enum Pattern {
 pub enum UnaryOp {
     Neg,
     Not,
+    Plus,
 }
 
 #[derive(Debug, Clone)]
@@ -138,9 +139,16 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    Mod,
+    Pow,
     Lt,
     Gt,
+    GEq,
+    LEq,
     Eq,
+    NEq,
+    And,
+    Or,
     Assign,
 }
 
