@@ -1,11 +1,12 @@
 use logos::Span;
 
-use crate::parser::lang_parser::{ParsingError, TokenStream};
+use crate::parser::token_stream::TokenStream;
+use crate::parser::ParsingError;
 
 #[derive(Debug, Clone)]
 pub struct Node<T> {
     pub id: usize,
-    pub span: Span,
+        pub span: Span,
     pub kind: T,
 }
 
@@ -13,14 +14,6 @@ impl<T> Node<T> {
     pub fn new(id: usize, span: Span, kind: T) -> Self {
         Self { id, span, kind }
     }
-}
-
-pub fn span_from_to(start: Span, end: Span) -> Span {
-    start.start..end.end
-}
-
-pub fn span_from_to_node<T>(start: &Node<T>, end: &Node<T>) -> Span {
-    start.span.start..end.span.end
 }
 
 pub type ExprNode = Node<Expression>;

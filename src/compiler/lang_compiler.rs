@@ -1,4 +1,4 @@
-use crate::parser::lang_ast;
+use crate::parser::ast;
 use crate::vm::lang_bytecode;
 
 use std::collections::HashMap;
@@ -32,7 +32,7 @@ impl SymbolTable {
     }
 }
 
-pub fn compile (ast: &lang_ast::AST) -> CompilerArtifacts {
+pub fn compile (ast: &ast::AST) -> CompilerArtifacts {
     let mut symbol_table = SymbolTable::new();
     let compiler_artifacts = CompilerArtifacts {
         bytecode: compile_function(&ast.main, &mut symbol_table),
@@ -42,7 +42,7 @@ pub fn compile (ast: &lang_ast::AST) -> CompilerArtifacts {
     compiler_artifacts
 }
 
-pub fn compile_function (function: &lang_ast::Function, symbol_table: &mut SymbolTable) 
+pub fn compile_function (function: &ast::Function, symbol_table: &mut SymbolTable) 
 -> Vec<lang_bytecode::Instruction> {
 
     let mut bytecode = Vec::new();
@@ -54,11 +54,11 @@ pub fn compile_function (function: &lang_ast::Function, symbol_table: &mut Symbo
     bytecode
 }
 
-pub fn compile_statement (statement: &lang_ast::Statement, symbol_table: &mut SymbolTable) 
+pub fn compile_statement (statement: &ast::Statement, symbol_table: &mut SymbolTable) 
 -> Vec<lang_bytecode::Instruction> {
     let mut bytecode = Vec::new();
 
-    use lang_ast::Statement as Statement;
+    use ast::Statement as Statement;
     match statement {
         
         Statement::Function(function) => {
@@ -91,7 +91,7 @@ pub fn compile_statement (statement: &lang_ast::Statement, symbol_table: &mut Sy
 
 }
 
-pub fn compile_assignment (assignment: &lang_ast::Assignment, symbol_table: &mut SymbolTable) 
+pub fn compile_assignment (assignment: &ast::Assignment, symbol_table: &mut SymbolTable) 
 -> Vec<lang_bytecode::Instruction> {
     let mut bytecode = Vec::new();
     bytecode.append(&mut compile_expression(&assignment.rhs, symbol_table));
@@ -104,15 +104,15 @@ pub fn compile_assignment (assignment: &lang_ast::Assignment, symbol_table: &mut
     bytecode
 }
 
-pub fn compile_expression (expression: &lang_ast::Expression, symbol_table: &mut SymbolTable) 
+pub fn compile_expression (expression: &ast::Expression, symbol_table: &mut SymbolTable) 
 -> Vec<lang_bytecode::Instruction> {
     let mut bytecode = Vec::new();
 
-    use lang_ast::Expression as Expression;
+    use ast::Expression as Expression;
     match expression {
         Expression::Constant(constant) => {
             match constant {
-                lang_ast::Constant::Integer(integer) => {
+                ast::Constant::Integer(integer) => {
                     bytecode.push(lang_bytecode::Instruction::MovConst(0, *integer));
                 }
             }
@@ -131,7 +131,7 @@ pub fn compile_expression (expression: &lang_ast::Expression, symbol_table: &mut
     bytecode
 }
 
-pub fn compile_binary_expression (binary_expression: &lang_ast::BinaryExpression, symbol_table: &mut SymbolTable) 
+pub fn compile_binary_expression (binary_expression: &ast::BinaryExpression, symbol_table: &mut SymbolTable) 
 -> Vec<lang_bytecode::Instruction> {
     let mut bytecode = Vec::new();
 
@@ -141,7 +141,7 @@ pub fn compile_binary_expression (binary_expression: &lang_ast::BinaryExpression
 
     bytecode.append(&mut compile_expression(&binary_expression.lhs, symbol_table));
     
-    use lang_ast::BinaryOperator as BinaryOperator;
+    use ast::BinaryOperator as BinaryOperator;
     
     bytecode.push(match binary_expression.operator {
         BinaryOperator::Addition => {
@@ -164,7 +164,7 @@ pub fn compile_binary_expression (binary_expression: &lang_ast::BinaryExpression
     bytecode
 }
 
-pub fn compile_print (symbol: &lang_ast::Symbol, symbol_table: &mut SymbolTable) 
+pub fn compile_print (symbol: &ast::Symbol, symbol_table: &mut SymbolTable) 
 -> Vec<lang_bytecode::Instruction> {
     let mut bytecode = Vec::new();
     if let Some(register_id) = symbol_table.get_variable(&symbol.name) {

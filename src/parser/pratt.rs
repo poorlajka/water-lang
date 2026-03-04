@@ -1,7 +1,9 @@
-use crate::lexer::lang_token::{self, Token};
-use crate::parser::lang_ast::{self, FunctionSignature, UnaryOp, span_from_to, span_from_to_node};
-use crate::parser::lang_ast::{BinaryOp, ExprNode, Expression, Node, PatNode, Pattern, Statement, StmtNode};
-use crate::parser::lang_parser::{create_node, parse_statement, ParsingError, TokenStream};
+use crate::lexer::token::{self, Token};
+use crate::parser::ast::{self, FunctionSignature, UnaryOp};
+use crate::parser::ast::{BinaryOp, ExprNode, Expression, Node, PatNode, Pattern, Statement};
+use crate::parser::token_stream::TokenStream;
+use crate::parser::utility::{create_node, span_from_to, span_from_to_node};
+use crate::parser::{parse_statement, ParsingError};
 use logos::Span;
 
 pub fn parse_expression(
@@ -34,8 +36,8 @@ fn infix_binding_power(tok: &Token) -> Option<(u8, u8, BinaryOp)> {
         Token::Star => Some((20, 21, BinaryOp::Mul)),
         Token::Slash => Some((20, 21, BinaryOp::Div)),
 
-        Token::And => Some((3, 4, BinaryOp::And)), 
-        Token::Or   => Some((2, 3, BinaryOp::Or)),
+        Token::And => Some((3, 4, BinaryOp::And)),
+        Token::Or => Some((2, 3, BinaryOp::Or)),
 
         Token::Lt => Some((5, 6, BinaryOp::Lt)),
         Token::Gt => Some((5, 6, BinaryOp::Gt)),
@@ -51,12 +53,8 @@ fn infix_binding_power(tok: &Token) -> Option<(u8, u8, BinaryOp)> {
 
 fn parse_prefix(token_stream: &mut TokenStream) -> Result<Node<Expression>, ParsingError> {
     match token_stream.next() {
-        Some((Token::Minus, op_span)) => {
-            parse_prefix_unary(token_stream, op_span, UnaryOp::Neg)
-        }
-        Some((Token::Bang, op_span)) => {
-            parse_prefix_unary(token_stream, op_span, UnaryOp::Not)
-        }
+        Some((Token::Minus, op_span)) => parse_prefix_unary(token_stream, op_span, UnaryOp::Neg),
+        Some((Token::Bang, op_span)) => parse_prefix_unary(token_stream, op_span, UnaryOp::Not),
         Some((Token::Integer(i), span)) => {
             Ok(create_node(token_stream, span, Expression::Integer(i)))
         }
@@ -96,7 +94,6 @@ fn parse_prefix_unary(
     op_span: Span,
     op: UnaryOp,
 ) -> Result<Node<Expression>, ParsingError> {
-
     // binding power for prefix operators
     const PREFIX_BP: u8 = 30;
 
@@ -390,7 +387,7 @@ fn parse_lambda_after_paren(
         span,
         Expression::Function {
             signature: FunctionSignature {
-                args: create_node(token_stream, span, params,
+                args: create_node(token_stream, span, params),
                 return_type: Box::new(return_type),
             },
             body: Box::new(body),

@@ -1,4 +1,5 @@
-use crate::parser::lang_ast::{BinaryOp, Expression, Module, Pattern, Statement};
+use crate::parser::ast::{BinaryOp, Expression, Module, Pattern, Statement};
+use logos::Span;
 
 pub fn print_ast(module: &Module) {
     println!("\nModule: {}", module.name);
@@ -18,7 +19,7 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
             let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
 
             if let Pattern::Identifier(lhs) = &lhs.kind {
-                print_expression(&Expression::Variable(lhs.to_string()), &new_prefix, false);
+                print_expression(&Expression::Identifier(lhs.to_string()), &new_prefix, false);
                 print_expression(&rhs.kind, &new_prefix, true);
             }
         }
@@ -55,7 +56,7 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
         }
 
         Expression::Identifier(v) => {
-            println!("Variable({})", v);
+            println!("Identifier({})", v);
         }
 
         Expression::Binary { lhs, op, rhs } => {

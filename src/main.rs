@@ -1,10 +1,6 @@
 mod lexer;
 mod parser;
 
-use crate::lexer::{lang_lexer, lang_token};
-use crate::parser::lang_parser;
-use crate::parser::print_ast::print_ast;
-
 use std::fs;
 
 fn main() {
@@ -22,7 +18,7 @@ fn main() {
     /*
         Tokenize code
     */
-    let lang_lexer::LexingArtifacts { tokens, errors } = lang_lexer::tokenize(&code);
+    let lexer::LexingArtifacts { tokens, errors } = lexer::tokenize(&code);
 
     if !errors.is_empty() {
         for error in &errors {
@@ -39,8 +35,8 @@ fn main() {
         Parse tokens
 
     */
-    let lang_parser::ParsingArtifacts { ast, errors } =
-        lang_parser::parse_module(&tokens, &"main".to_string());
+    let parser::ParsingArtifacts { ast, errors } =
+        parser::parse_module(&tokens, &"main".to_string());
 
     if !errors.is_empty() {
         for error in errors {
@@ -48,7 +44,7 @@ fn main() {
         }
     }
 
-    print_ast(&ast);
+    parser::display::print_ast(&ast);
 
     /*
     }
