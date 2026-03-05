@@ -1,0 +1,122 @@
+use crate::parser::ast::{Expression, Module, Pattern, Statement};
+
+pub fn print_ast(module: &Module) {
+    println!("\nModule: {}", module.name);
+    for statement in &module.statements {
+        print_statement(&statement, "", true);
+    }
+}
+
+fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
+    let connector = if is_last { "└── " } else { "├── " };
+    print!("{prefix}{connector}");
+
+    match expr {
+        Expression::Assignment { lhs, rhs } => {
+            println!("Assignment");
+
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+
+            if let Pattern::Identifier(lhs) = &lhs.kind {
+                print_expression(&Expression::Identifier(lhs.to_string()), &new_prefix, false);
+                print_expression(&rhs.kind, &new_prefix, true);
+            }
+        }
+        Expression::Integer(i) => {
+            println!("Integer({})", i);
+        }
+        Expression::Array(a) => {
+            println!("Array");
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+            for i in a {
+                print_expression(&i.kind, &new_prefix, is_last);
+            }
+        }
+        Expression::Tuple(a) => {
+            println!("Tuple");
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+            for i in a {
+                print_expression(&i.kind, &new_prefix, is_last);
+            }
+        }
+        Expression::Index { target, index } => {
+            println!("Index");
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+            print_expression(&target.kind, &new_prefix, false);
+            print_expression(&index.kind, &new_prefix, true);
+        }
+
+        Expression::Float(f) => {
+            println!("Float({})", f);
+        }
+
+        Expression::String(s) => {
+            println!("String(\"{}\")", s);
+        }
+
+        Expression::Identifier(v) => {
+            println!("Identifier({})", v);
+        }
+
+        Expression::Binary { lhs, op, rhs } => {
+            println!("Binary({:?})", op);
+
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+
+            print_expression(&lhs.kind, &new_prefix, false);
+            print_expression(&rhs.kind, &new_prefix, true);
+        }
+
+        Expression::Block {
+            statements,
+            final_expr,
+        } => {
+            println!("Block");
+
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+
+            for (i, stmt) in statements.iter().enumerate() {
+                let last_stmt = i == statements.len() - 1 && final_expr.is_none();
+                print_statement(stmt, &new_prefix, last_stmt);
+            }
+
+            if let Some(expr) = final_expr {
+                print_expression(&expr.kind, &new_prefix, true);
+            }
+        }
+
+        Expression::Conditional {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            println!("If");
+
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+
+            print_expression(&condition.kind, &new_prefix, false);
+            print_expression(&then_branch.kind, &new_prefix, else_branch.is_none());
+
+            if let Some(else_expr) = &*else_branch {
+                print_expression(&else_expr.kind, &new_prefix, true);
+            }
+        }
+        Expression::FunctionCall { .. } => {}
+        Expression::Unary { .. } => {}
+        _ => {}
+    }
+}
+
+fn print_statement(stmt: &Statement, prefix: &str, is_last: bool) {
+    let connector = if is_last { "└── " } else { "├── " };
+    print!("{prefix}{connector}");
+
+    match stmt {
+        Statement::Expression(expr) => {
+            println!("Expression");
+            let new_prefix = format!("{prefix}{}", if is_last { "    " } else { "│   " });
+            print_expression(&expr.kind, &new_prefix, true);
+        }
+        _ => {}
+    }
+}

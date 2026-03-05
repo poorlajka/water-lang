@@ -1,0 +1,7 @@
+[package]
+name = "water-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+water = { path = "../compiler" }

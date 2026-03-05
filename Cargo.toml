@@ -1,7 +1,3 @@
-[package]
-name = "water"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-logos = "0.16.0"
+[workspace]
+members = ["compiler", "cli"]
+resolver = "3"
