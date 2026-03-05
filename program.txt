@@ -1,2 +1,0 @@
-let k = 56
-print k
