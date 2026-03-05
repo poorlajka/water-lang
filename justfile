@@ -1,16 +1,22 @@
 set shell := ["bash", "-euxo", "pipefail", "-c"]
 
-default: fmt clippy check test
+ci: fmt fmt-check clippy check test
 
 fmt:
-    cargo fmt
-    cargo fmt -- --check
+    cargo +nightly fmt
+
+fmt-check:
+    cargo +nightly fmt -- --check
 
 clippy:
-    cargo clippy --all-targets -- -D warnings
+    cargo +stable clippy --all-targets -- -D warnings
 
 check:
-    cargo check --all-targets
+    cargo +stable check --workspace
 
 test:
-    cargo test --all
+    cargo +stable test --workspace
+
+run *args:
+    cargo +stable run -p flow -- {{args}}
+
