@@ -222,7 +222,8 @@ fn parse_string(lex: &mut logos::Lexer<Token>) -> String {
                     other => result.push(other),
                 }
             }
-        } else {
+        }
+        else {
             result.push(c);
         }
     }

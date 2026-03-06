@@ -1,3 +1,5 @@
+pub mod display;
+
 use logos::Span;
 
 use crate::parser::ParsingError;
@@ -86,6 +88,11 @@ pub enum Expression {
         callee: Box<ExprNode>,
         arguments: Vec<ExprNode>,
     },
+
+    Typed {
+        expr: Box<Node<Expression>>,
+        ty: Box<Node<Type>>,
+    },
 }
 
 impl Node<Expression> {
@@ -103,7 +110,10 @@ impl Node<Expression> {
             ),
 
             _ => {
-                return Err(ParsingError::new("Invalid assignment target", Some(span)));
+                return Err(ParsingError::new(
+                    "Invalid assignment target",
+                    Some(span),
+                ));
             }
         };
 
@@ -115,6 +125,11 @@ impl Node<Expression> {
 pub enum Pattern {
     Identifier(String),
     Tuple(Vec<PatNode>),
+
+    Typed {
+        pattern: Box<PatNode>,
+        ty: TypeNode,
+    }
     // future:
     // Wildcard,
     // StructPattern { ... },
@@ -145,18 +160,13 @@ pub enum BinaryOp {
     And,
     Or,
     Assign,
+    TypeAnnotation,
 }
 
 #[derive(Debug, Clone)]
 pub struct FunctionSignature {
-    pub args: Vec<Parameter>,
+    pub args: Vec<Pattern>,
     pub return_type: TypeNode,
-}
-
-#[derive(Debug, Clone)]
-pub struct Parameter {
-    pub binding: PatNode,
-    pub ptype: TypeNode,
 }
 
 #[derive(Debug, Clone)]

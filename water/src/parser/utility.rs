@@ -1,8 +1,12 @@
-use crate::parser::ast::Node;
+use crate::ast::Node;
 use crate::parser::token_stream::TokenStream;
 use logos::Span;
 
-pub fn create_node<T>(token_stream: &mut TokenStream, span: Span, kind: T) -> Node<T> {
+pub fn create_node<T>(
+    token_stream: &mut TokenStream,
+    span: Span,
+    kind: T,
+) -> Node<T> {
     let id = token_stream.next_id();
     Node::<T>::new(id, span, kind)
 }

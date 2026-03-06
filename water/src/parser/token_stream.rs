@@ -11,11 +11,22 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
+    pub fn new(tokens: Vec<(Token, Span)>) -> Self {
+        Self {
+            tokens,
+            pos: 0,
+            save_pos: 0,
+            group_depth: 0,
+            next_id: 0,
+        }
+    }
+
     pub fn next(&mut self) -> Option<(Token, Span)> {
         if self.pos < self.tokens.len() - 1 {
             self.pos += 1;
             Some(self.tokens[self.pos].clone())
-        } else {
+        }
+        else {
             None
         }
     }
@@ -23,7 +34,8 @@ impl TokenStream {
     pub fn peek(&self) -> Option<(Token, Span)> {
         if self.pos < self.tokens.len() - 1 {
             Some(self.tokens[self.pos + 1].clone())
-        } else {
+        }
+        else {
             None
         }
     }
@@ -42,14 +54,20 @@ impl TokenStream {
         }
     }
 
-    pub fn expect(&mut self, expected: Token) -> Result<(Token, Span), ParsingError> {
+    pub fn expect(
+        &mut self,
+        expected: Token,
+    ) -> Result<(Token, Span), ParsingError> {
         match self.next() {
             Some((tok, span)) if tok == expected => Ok((tok, span)),
             Some((_, span)) => Err(ParsingError::new(
                 &format!("Expected {:?}", expected),
                 Some(span),
             )),
-            None => Err(ParsingError::new(&format!("Expected {:?}", expected), None)),
+            None => Err(ParsingError::new(
+                &format!("Expected {:?}", expected),
+                None,
+            )),
         }
     }
 

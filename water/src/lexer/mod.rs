@@ -68,7 +68,8 @@ pub fn tokenize(code: &str) -> LexingArtifacts {
                 lexing_artifacts
                     .tokens
                     .push((Token::Indent, span.clone().into()));
-            } else if new_indent < old_indent {
+            }
+            else if new_indent < old_indent {
                 lexing_artifacts
                     .tokens
                     .push((Token::Dedent, span.clone().into()));

@@ -1,6 +1,6 @@
+use crate::ast::{BinaryOp, Expression, Node, Statement};
+use crate::ast::{FunctionSignature, UnaryOp};
 use crate::lexer::token::Token;
-use crate::parser::ast::{BinaryOp, Expression, Node, Statement};
-use crate::parser::ast::{FunctionSignature, UnaryOp};
 use crate::parser::token_stream::TokenStream;
 use crate::parser::utility::{create_node, span_from_to, span_from_to_node};
 use crate::parser::{parse_statement, ParsingError};
@@ -47,25 +47,37 @@ fn infix_binding_power(tok: &Token) -> Option<(u8, u8, BinaryOp)> {
         Token::NotEq => Some((4, 5, BinaryOp::NEq)),
         Token::Eq => Some((1, 0, BinaryOp::Assign)),
 
+        Token::Colon => Some((25, 26, BinaryOp::TypeAnnotation)),
+
         _ => None,
     }
 }
 
-fn parse_prefix(token_stream: &mut TokenStream) -> Result<Node<Expression>, ParsingError> {
+fn parse_prefix(
+    token_stream: &mut TokenStream,
+) -> Result<Node<Expression>, ParsingError> {
     match token_stream.next() {
-        Some((Token::Minus, op_span)) => parse_prefix_unary(token_stream, op_span, UnaryOp::Neg),
-        Some((Token::Bang, op_span)) => parse_prefix_unary(token_stream, op_span, UnaryOp::Not),
+        Some((Token::Minus, op_span)) => {
+            parse_prefix_unary(token_stream, op_span, UnaryOp::Neg)
+        }
+        Some((Token::Bang, op_span)) => {
+            parse_prefix_unary(token_stream, op_span, UnaryOp::Not)
+        }
         Some((Token::Integer(i), span)) => {
             Ok(create_node(token_stream, span, Expression::Integer(i)))
         }
-        Some((Token::Float(f), span)) => Ok(create_node(token_stream, span, Expression::Float(f))),
+        Some((Token::Float(f), span)) => {
+            Ok(create_node(token_stream, span, Expression::Float(f)))
+        }
         Some((Token::DoubleQuotedString(s), span)) => {
             Ok(create_node(token_stream, span, Expression::String(s)))
         }
         Some((Token::Identifier(i), span)) => {
             Ok(create_node(token_stream, span, Expression::Identifier(i)))
         }
-        Some((Token::LBracket, start_span)) => parse_array(token_stream, start_span),
+        Some((Token::LBracket, start_span)) => {
+            parse_array(token_stream, start_span)
+        }
         Some((Token::If, _span)) => parse_conditional(token_stream),
         Some((Token::LParen, start_span)) => {
             /*
@@ -76,7 +88,8 @@ fn parse_prefix(token_stream: &mut TokenStream) -> Result<Node<Expression>, Pars
 
             if matches!(token_stream.peek(), Some((Token::RArrow, _))) {
                 parse_lambda_after_paren(token_stream, expr, start_span)
-            } else {
+            }
+            else {
                 Ok(expr)
             }
         }
@@ -123,7 +136,9 @@ fn parse_postfix(
 
             let end_span = match token_stream.next() {
                 Some((Token::RBracket, span)) => span,
-                Some((_, span)) => return Err(ParsingError::new("Expected ']'", Some(span))),
+                Some((_, span)) => {
+                    return Err(ParsingError::new("Expected ']'", Some(span)))
+                }
                 None => return Err(ParsingError::new("Unexpected EOF", None)),
             };
 
@@ -153,10 +168,16 @@ fn parse_postfix(
                         }
                         Some((Token::RParen, _)) => break,
                         Some((_, span)) => {
-                            return Err(ParsingError::new("Expected ',' or ')'", Some(span)))
+                            return Err(ParsingError::new(
+                                "Expected ',' or ')'",
+                                Some(span),
+                            ))
                         }
                         None => {
-                            return Err(ParsingError::new("Unexpected EOF in function call", None))
+                            return Err(ParsingError::new(
+                                "Unexpected EOF in function call",
+                                None,
+                            ))
                         }
                     }
                 }
@@ -164,8 +185,15 @@ fn parse_postfix(
 
             let end_span = match token_stream.next() {
                 Some((Token::RParen, span)) => span,
-                Some((_, span)) => return Err(ParsingError::new("Expected ')'", Some(span))),
-                None => return Err(ParsingError::new("Unexpected EOF in function call", None)),
+                Some((_, span)) => {
+                    return Err(ParsingError::new("Expected ')'", Some(span)))
+                }
+                None => {
+                    return Err(ParsingError::new(
+                        "Unexpected EOF in function call",
+                        None,
+                    ))
+                }
             };
 
             let span = span_from_to_node(
@@ -234,7 +262,9 @@ fn parse_infix(
     Ok(Some(new_lhs))
 }
 
-fn parse_block(token_stream: &mut TokenStream) -> Result<Node<Expression>, ParsingError> {
+fn parse_block(
+    token_stream: &mut TokenStream,
+) -> Result<Node<Expression>, ParsingError> {
     token_stream.skip_newlines();
     let (_, block_span_start) = token_stream.expect(Token::Indent)?;
 
@@ -264,7 +294,8 @@ fn parse_block(token_stream: &mut TokenStream) -> Result<Node<Expression>, Parsi
                 None
             }
         }
-    } else {
+    }
+    else {
         None
     };
 
@@ -279,7 +310,9 @@ fn parse_block(token_stream: &mut TokenStream) -> Result<Node<Expression>, Parsi
     ))
 }
 
-fn parse_conditional(token_stream: &mut TokenStream) -> Result<Node<Expression>, ParsingError> {
+fn parse_conditional(
+    token_stream: &mut TokenStream,
+) -> Result<Node<Expression>, ParsingError> {
     let condition = parse_expression(token_stream, 0)?;
 
     let then_branch = match token_stream.peek() {
@@ -295,7 +328,8 @@ fn parse_conditional(token_stream: &mut TokenStream) -> Result<Node<Expression>,
             token_stream.next();
             if matches!(token_stream.peek(), Some((Token::Indent, _))) {
                 Some(Box::new(parse_block(token_stream)?))
-            } else {
+            }
+            else {
                 Some(Box::new(parse_expression(token_stream, 0)?))
             }
         }
@@ -331,9 +365,15 @@ fn parse_array(
             Some((Token::RBracket, end_span)) => {
                 token_stream.next();
                 let span = span_from_to(start_span, end_span);
-                return Ok(create_node(token_stream, span, Expression::Array(elements)));
+                return Ok(create_node(
+                    token_stream,
+                    span,
+                    Expression::Array(elements),
+                ));
             }
-            None => return Err(ParsingError::new("Unexpected EOF in array", None)),
+            None => {
+                return Err(ParsingError::new("Unexpected EOF in array", None))
+            }
             _ => {
                 let expr = parse_expression(token_stream, 0)?;
                 elements.push(expr);
@@ -344,9 +384,17 @@ fn parse_array(
                     }
                     Some((Token::RBracket, _)) => {}
                     Some((_, span)) => {
-                        return Err(ParsingError::new("Expected ',' or ']'", Some(span)))
+                        return Err(ParsingError::new(
+                            "Expected ',' or ']'",
+                            Some(span),
+                        ))
                     }
-                    None => return Err(ParsingError::new("Unexpected EOF in array", None)),
+                    None => {
+                        return Err(ParsingError::new(
+                            "Unexpected EOF in array",
+                            None,
+                        ))
+                    }
                 }
             }
         }
@@ -423,7 +471,8 @@ fn parse_paren_expr(
 
     if elements.len() == 1 {
         Ok(elements.into_iter().next().unwrap())
-    } else {
+    }
+    else {
         Ok(create_node(token_stream, span, Expression::Tuple(elements)))
     }
 }
