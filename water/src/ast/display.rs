@@ -3,7 +3,7 @@ use crate::ast::{Expression, Module, Pattern, Statement};
 pub fn print_ast(module: &Module) {
     println!("\nModule: {}", module.name);
     for statement in &module.statements {
-        print_statement(&statement, "", true);
+        print_statement(statement, "", true);
     }
 }
 
@@ -113,7 +113,7 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
                 else_branch.is_none(),
             );
 
-            if let Some(else_expr) = &*else_branch {
+            if let Some(else_expr) = else_branch {
                 print_expression(&else_expr.kind, &new_prefix, true);
             }
         }
@@ -134,6 +134,8 @@ fn print_statement(stmt: &Statement, prefix: &str, is_last: bool) {
                 format!("{prefix}{}", if is_last { "    " } else { "│   " });
             print_expression(&expr.kind, &new_prefix, true);
         }
-        _ => {}
+        _ => {
+            println!("Other");
+        }
     }
 }

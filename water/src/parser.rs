@@ -28,7 +28,7 @@ impl ParsingError {
 }
 
 pub fn parse_module(
-    tokens: &Vec<(Token, Span)>,
+    tokens: &[(Token, Span)],
     name: &String,
 ) -> ParsingArtifacts {
     let mut parsing_artifacts = ParsingArtifacts {
@@ -41,7 +41,7 @@ pub fn parse_module(
 
     let mut token_stream = TokenStream::new(tokens.to_vec());
 
-    while !token_stream.peek().is_none() {
+    while token_stream.peek().is_some() {
         match parse_statement(&mut token_stream) {
             Ok(statement) => parsing_artifacts.ast.statements.push(statement),
             Err(error) => parsing_artifacts.errors.push(error),

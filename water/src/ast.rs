@@ -126,14 +126,10 @@ pub enum Pattern {
     Identifier(String),
     Tuple(Vec<PatNode>),
 
-    Typed {
-        pattern: Box<PatNode>,
-        ty: TypeNode,
-    }
-    // future:
-    // Wildcard,
-    // StructPattern { ... },
-    // List(Vec<Pattern>),
+    Typed { pattern: Box<PatNode>, ty: TypeNode }, // future:
+                                                   // Wildcard,
+                                                   // StructPattern { ... },
+                                                   // List(Vec<Pattern>),
 }
 
 #[derive(Debug, Clone)]
@@ -165,7 +161,7 @@ pub enum BinaryOp {
 
 #[derive(Debug, Clone)]
 pub struct FunctionSignature {
-    pub args: Vec<Pattern>,
+    pub args: Vec<PatNode>,
     pub return_type: TypeNode,
 }
 
@@ -173,14 +169,14 @@ pub struct FunctionSignature {
 pub enum Type {
     Named(String),
 
-    Tuple(Vec<Type>),
+    Tuple(Vec<TypeNode>),
 
-    Array(Box<Type>),
+    Array(Box<TypeNode>),
 
     Function {
-        params: Vec<Type>,
-        return_type: Box<Type>,
+        params: Vec<TypeNode>,
+        return_type: Box<TypeNode>,
     },
 
-    Inferred,
+    Dynamic,
 }

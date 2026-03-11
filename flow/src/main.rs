@@ -1,5 +1,4 @@
-use compiler::lexer;
-use compiler::parser;
+use water::{lexer, ast, parser};
 
 use std::fs;
 
@@ -44,7 +43,7 @@ fn main() {
         }
     }
 
-    parser::display::print_ast(&ast);
+    ast::display::print_ast(&ast);
 
     /*
     }

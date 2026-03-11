@@ -65,14 +65,10 @@ pub fn tokenize(code: &str) -> LexingArtifacts {
             let new_indent = count_columns(&leading_ws);
 
             if new_indent > old_indent {
-                lexing_artifacts
-                    .tokens
-                    .push((Token::Indent, span.clone().into()));
+                lexing_artifacts.tokens.push((Token::Indent, span.clone()));
             }
             else if new_indent < old_indent {
-                lexing_artifacts
-                    .tokens
-                    .push((Token::Dedent, span.clone().into()));
+                lexing_artifacts.tokens.push((Token::Dedent, span.clone()));
             }
             old_indent = new_indent;
         }

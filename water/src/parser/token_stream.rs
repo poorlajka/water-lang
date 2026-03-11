@@ -6,7 +6,7 @@ pub struct TokenStream {
     tokens: Vec<(Token, Span)>,
     pos: usize,
     save_pos: usize,
-    group_depth: usize,
+    _group_depth: usize,
     next_id: usize,
 }
 
@@ -16,7 +16,7 @@ impl TokenStream {
             tokens,
             pos: 0,
             save_pos: 0,
-            group_depth: 0,
+            _group_depth: 0,
             next_id: 0,
         }
     }

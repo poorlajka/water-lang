@@ -1,10 +1,43 @@
-use crate::ast::{BinaryOp, Expression, Node, Statement};
+use crate::ast::{BinaryOp, Expression, Node, Statement, Type};
 use crate::ast::{FunctionSignature, UnaryOp};
 use crate::lexer::token::Token;
 use crate::parser::token_stream::TokenStream;
 use crate::parser::utility::{create_node, span_from_to, span_from_to_node};
 use crate::parser::{parse_statement, ParsingError};
 use logos::Span;
+
+pub fn parse_type(
+    token_stream: &mut TokenStream,
+) -> Result<Node<Type>, ParsingError> {
+    match token_stream.peek() {
+        Some((Token::Identifier(name), span)) => {
+            Ok(create_node(token_stream, span, Type::Named(name)))
+        }
+        Some((Token::LParen, start_span)) => {
+            let mut tuple = Vec::new();
+
+            tuple.push(parse_type(token_stream)?);
+
+            while matches!(token_stream.peek(), Some((Token::Comma, _))) {
+                token_stream.next();
+                tuple.push(parse_type(token_stream)?);
+            }
+
+            let end_span = match token_stream.next() {
+                Some((Token::RParen, span)) => span,
+                _ => return Err(ParsingError::new("Expected ')'", None)),
+            };
+
+            let span = span_from_to(start_span, end_span);
+
+            Ok(create_node(token_stream, span, Type::Tuple(tuple)))
+        }
+        Some((_, span)) => {
+            Err(ParsingError::new("Unexpected token", Some(span)))
+        }
+        None => Err(ParsingError::new("Unexpected EOF", None)),
+    }
+}
 
 pub fn parse_expression(
     token_stream: &mut TokenStream,
@@ -197,7 +230,7 @@ fn parse_postfix(
             };
 
             let span = span_from_to_node(
-                &lhs,
+                lhs,
                 &Node::new(0, end_span, Expression::Tuple(args.clone())),
             ); // dummy node for span
 
@@ -234,7 +267,7 @@ fn parse_infix(
 
     token_stream.next(); // consume operator
     let rhs = parse_expression(token_stream, right_bp)?;
-    let span = span_from_to_node(&lhs, &rhs);
+    let span = span_from_to_node(lhs, &rhs);
 
     let new_lhs = match bin_op {
         BinaryOp::Assign => {
@@ -408,7 +441,7 @@ fn parse_lambda_after_paren(
 ) -> Result<Node<Expression>, ParsingError> {
     token_stream.next(); // consume =>
 
-    let return_type = parse_expression(token_stream, 0)?;
+    let return_type = parse_type(token_stream)?;
     let body = parse_block(token_stream)?;
 
     // Convert params_expr into patterns
@@ -428,15 +461,15 @@ fn parse_lambda_after_paren(
         }
     };
 
-    let span = span_from_to(start_span, body.span);
+    let span = span_from_to(start_span, body.span.clone());
 
     Ok(create_node(
         token_stream,
         span,
         Expression::Function {
             signature: FunctionSignature {
-                args: create_node(token_stream, span, params),
-                return_type: Box::new(return_type),
+                args: params,
+                return_type,
             },
             body: Box::new(body),
         },
