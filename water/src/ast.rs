@@ -11,6 +11,12 @@ pub struct Node<T> {
     pub kind: T,
 }
 
+impl<T: PartialEq> PartialEq for Node<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
+
 impl<T> Node<T> {
     pub fn new(id: usize, span: Span, kind: T) -> Self {
         Self { id, span, kind }
@@ -21,13 +27,13 @@ pub type ExprNode = Node<Expression>;
 pub type PatNode = Node<Pattern>;
 pub type TypeNode = Node<Type>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Module {
     pub name: String,
     pub statements: Vec<Statement>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Expression(ExprNode),
     //Import(Import),
@@ -35,10 +41,10 @@ pub enum Statement {
     //ForLoop(ForLoop),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Return {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Integer(i64),
     Float(f64),
@@ -89,6 +95,8 @@ pub enum Expression {
         arguments: Vec<ExprNode>,
     },
 
+    Type(Type),
+
     Typed {
         expr: Box<Node<Expression>>,
         ty: Box<Node<Type>>,
@@ -121,7 +129,7 @@ impl Node<Expression> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     Identifier(String),
     Tuple(Vec<PatNode>),
@@ -132,14 +140,14 @@ pub enum Pattern {
                                                    // List(Vec<Pattern>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
     Neg,
     Not,
     Plus,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -159,13 +167,13 @@ pub enum BinaryOp {
     TypeAnnotation,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionSignature {
     pub args: Vec<PatNode>,
     pub return_type: TypeNode,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Named(String),
 

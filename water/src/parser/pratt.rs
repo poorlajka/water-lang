@@ -1,6 +1,6 @@
 use crate::ast::{BinaryOp, Expression, Node, Statement, Type};
 use crate::ast::{FunctionSignature, UnaryOp};
-use crate::lexer::token::Token;
+use crate::lexer::token::{self, Token};
 use crate::parser::token_stream::TokenStream;
 use crate::parser::utility::{create_node, span_from_to, span_from_to_node};
 use crate::parser::{parse_statement, ParsingError};
@@ -441,8 +441,13 @@ fn parse_lambda_after_paren(
 ) -> Result<Node<Expression>, ParsingError> {
     token_stream.next(); // consume =>
 
-    let return_type = parse_type(token_stream)?;
-    let body = parse_block(token_stream)?;
+    let return_type = create_node(token_stream, start_span.clone(), Type::Dynamic);//parse_type(token_stream)?;
+    let body = if let Some((Token::Indent, _)) = token_stream.peek() {
+        parse_block(token_stream)?
+    }
+    else {
+        parse_expression(token_stream, 0)?
+    };
 
     // Convert params_expr into patterns
     let params = match params_expr.kind {

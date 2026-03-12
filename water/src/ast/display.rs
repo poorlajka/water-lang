@@ -7,6 +7,16 @@ pub fn print_ast(module: &Module) {
     }
 }
 
+fn print_pattern(pat: &Pattern, prefix: &str, _is_last: bool) {
+    if let Pattern::Identifier(lhs) = pat {
+        print_expression(
+            &Expression::Identifier(lhs.to_string()),
+            prefix,
+            false,
+        );
+    }
+}
+
 fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
     let connector = if is_last { "└── " } else { "├── " };
     print!("{prefix}{connector}");
@@ -18,14 +28,8 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
             let new_prefix =
                 format!("{prefix}{}", if is_last { "    " } else { "│   " });
 
-            if let Pattern::Identifier(lhs) = &lhs.kind {
-                print_expression(
-                    &Expression::Identifier(lhs.to_string()),
-                    &new_prefix,
-                    false,
-                );
-                print_expression(&rhs.kind, &new_prefix, true);
-            }
+            print_pattern(&lhs.kind, prefix, is_last);
+            print_expression(&rhs.kind, &new_prefix, true);
         }
         Expression::Integer(i) => {
             println!("Integer({})", i);
@@ -118,6 +122,18 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
             }
         }
         Expression::FunctionCall { .. } => {}
+        Expression::Function { signature, body } => {
+            println!("Function");
+
+            let new_prefix =
+                format!("{prefix}{}", if is_last { "    " } else { "│   " });
+
+            for arg in &signature.args {
+                print_pattern(&arg.kind, &new_prefix, is_last);
+            }
+
+            print_expression(&body.kind, &new_prefix, is_last);
+        }
         Expression::Unary { .. } => {}
         _ => {}
     }

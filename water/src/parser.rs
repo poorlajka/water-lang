@@ -68,8 +68,7 @@ fn parse_statement(
             return Ok(Statement::Expression(expression));
         }
         Err(error) => {
-            println!("{:?}", error);
-            token_stream.backtrack();
+            //token_stream.backtrack();
         }
     }
 
