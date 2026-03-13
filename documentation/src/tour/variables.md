@@ -6,7 +6,7 @@ This could for example be a constant like the number 3.14 or the word "Cow", or 
 The value of an expression can be assigned to a variable, by writing the name of the variable followed by
 an equal sign and then the expression:
 
-~~~
+~~~ts
 my_var = 5
 ~~~
 
@@ -15,7 +15,7 @@ my_var = 5
 Every expression (and thus variable) has a type. When assigning the result of an expression to a variable like in the previous example, type will automatically be inferred based on the expression. 
 The type of a variable or expression may be explicitly specified using the ":" operator:
 
-~~~
+~~~ts
 my_var1: float = 5
 
 my_var2 = 5: float

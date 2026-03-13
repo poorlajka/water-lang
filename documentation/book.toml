@@ -2,3 +2,7 @@
 title = "The Water Programming Language"
 authors = ["poorlajka"]
 language = "en"
+
+[output.html]
+default-theme = "coal"
+preferred-dark-theme = "coal"

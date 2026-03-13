@@ -1,10 +1,13 @@
 # Summary
 
-- [Common Programming Concepts](./common_programming_concepts.md)
-    - [Variables and Expressions](./common_programming_concepts/variables.md)
-    - [Comments](./common_programming_concepts/comments.md)
-    - [Conditionals](./common_programming_concepts/conditionals.md)
-    - [Functions](./common_programming_concepts/functions.md)
-    - [Loops](./common_programming_concepts/loops.md)
-    - [Containers](./common_programming_concepts/containers.md)
-    - [Scopes](./common_programming_concepts/scopes.md)
+- [Introduction](./introduction.md)
+
+- [A tour of Water](./tour.md)
+    - [Variables and Expressions](./tour/variables.md)
+    - [Comments](./tour/comments.md)
+    - [Conditionals](./tour/conditionals.md)
+    - [Functions](./tour/functions.md)
+    - [Loops](./tour/loops.md)
+    - [Containers](./tour/containers.md)
+    - [Modules and Imports](./tour/modules.md)
+    - [Scopes](./tour/scopes.md)
