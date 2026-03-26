@@ -310,7 +310,7 @@ fn parse_block(
                 break block_span_end;
             }
             None => {
-                return Err(ParsingError::new("Unexpected EOF", None));
+                break 0..0;
             }
             Some(_) => {
                 let stmt = parse_statement(token_stream)?;
@@ -442,7 +442,10 @@ fn parse_lambda_after_paren(
     token_stream.next(); // consume =>
 
     let return_type = create_node(token_stream, start_span.clone(), Type::Dynamic);//parse_type(token_stream)?;
+
+    token_stream.skip_newlines();
     let body = if let Some((Token::Indent, _)) = token_stream.peek() {
+        println!("hello");
         parse_block(token_stream)?
     }
     else {

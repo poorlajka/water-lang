@@ -65,12 +65,21 @@ fn parse_statement(
     token_stream.save_pos();
     match pratt::parse_expression(token_stream, 0) {
         Ok(expression) => {
-            return Ok(Statement::Expression(expression));
+            match token_stream.peek() {
+                None
+                | Some((Token::Newline, _))
+                | Some((Token::Eof, _)) => {
+                    return Ok(Statement::Expression(expression));
+                }
+                Some((tok, span)) => {
+                    return Err(ParsingError::new("Unterminated expression, expected newline or eof.", Some(span)));
+                }
+            }
         }
         Err(error) => {
             //token_stream.backtrack();
+            return Err(error)
         }
     }
 
-    Err(ParsingError::new("Parsing error", None))
 }
