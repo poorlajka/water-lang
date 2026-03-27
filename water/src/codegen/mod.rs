@@ -1,11 +1,15 @@
-use crate::ast;
-use crate::bytecode;
+use crate::ast::{Expression, Node, Pattern, FunctionSignature, Module};
+use crate::bytecode::Instruction;
 
 use std::collections::HashMap;
 
-pub struct CompilerArtifacts {
-    pub bytecode: Vec<bytecode::Instruction>,
-    pub errors: Vec<i32>,
+pub struct ByteCode {
+    pub functions: Vec<CompiledFunction>,
+}
+
+pub struct CompiledFunction {
+    pub code_block: Vec<Instruction>,
+    pub symbol_table: SymbolTable,
 }
 
 struct SymbolTable {
@@ -30,9 +34,10 @@ impl SymbolTable {
     fn get_variable (&self, name: &str) -> Option<&usize> {
         self.symbols.get(name)
     }
+    
 }
 
-pub fn compile (module: &ast::Module) -> CompilerArtifacts {
+pub fn compile_module (module: &Module) -> ByteCode {
     let mut symbol_table = SymbolTable::new();
     let mut bytecode = Vec::new();
 
@@ -48,23 +53,32 @@ pub fn compile (module: &ast::Module) -> CompilerArtifacts {
     compiler_artifacts
 }
 
-pub fn compile_function (function: &ast::Expression, symbol_table: &mut SymbolTable) 
--> Vec<bytecode::Instruction> {
+fn compile_function (signature: &FunctionSignature, body: &Expression, symbol_table: &mut SymbolTable) 
+-> Vec<Instruction> {
 
     let mut bytecode = Vec::new();
 
-    if let ast::Expression::Function { signature, body } = function {
-        bytecode.append(&mut compile_expression(&body.kind, symbol_table));
-    } 
+    for arg in &signature.args {
+        match &arg.kind {
+            Pattern::Identifier(ident) => {
+
+            }
+            _ => {
+
+            }
+        }
+    }
+
+    bytecode.append(&mut compile_expression(body, symbol_table));
 
     bytecode
 }
 
-pub fn compile_statement (statement: &ast::Statement, symbol_table: &mut SymbolTable) 
--> Vec<bytecode::Instruction> {
+fn compile_statement (statement: &Statement, symbol_table: &mut SymbolTable) 
+-> Vec<Instruction> {
     let mut bytecode = Vec::new();
 
-    use ast::Statement as Statement;
+    use Statement as Statement;
     match statement {
         Statement::Expression(expression) => {
             bytecode.append(&mut compile_expression(&expression.kind, symbol_table));
@@ -79,85 +93,94 @@ pub fn compile_statement (statement: &ast::Statement, symbol_table: &mut SymbolT
 
 }
 
-pub fn compile_assignment (assignment: &ast::Expression, symbol_table: &mut SymbolTable) 
--> Vec<bytecode::Instruction> {
+fn compile_assignment (lhs: &Pattern, rhs: &Expression, symbol_table: &mut SymbolTable) 
+-> Vec<Instruction> {
     let mut bytecode = Vec::new();
-    bytecode.append(&mut compile_expression(&assignment.rhs, symbol_table));
-    bytecode.push(
-        bytecode::Instruction::Mov(
-            symbol_table.register_variable(&assignment.lhs[0].name), 
-            0,
-        ));
-
-    bytecode
-}
-
-pub fn compile_expression (expression: &ast::Expression, symbol_table: &mut SymbolTable) 
--> Vec<bytecode::Instruction> {
-    let mut bytecode = Vec::new();
-
-    use ast::Expression as Expression;
-    match expression {
-        Expression::Constant(constant) => {
-            match constant {
-                ast::Constant::Integer(integer) => {
-                    bytecode.push(bytecode::Instruction::MovConst(0, *integer));
-                }
-            }
-        },
-        Expression::FunctionCall => {
-
-        },
-        Expression::BinaryExpression(binary_expression) => {
-            bytecode.append(&mut compile_binary_expression(binary_expression, symbol_table));
-        },
+    bytecode.append(&mut compile_expression(&rhs, symbol_table));
+    match &lhs{
+        Pattern::Identifier(ident) => {
+            bytecode.push(
+                Instruction::Mov(
+                    symbol_table.register_variable(ident), 
+                    0,
+                ));
+        }
         _ => {
-            
+
         }
     }
-
     bytecode
 }
 
-pub fn compile_binary_expression (binary_expression: &ast::BinaryExpression, symbol_table: &mut SymbolTable) 
--> Vec<bytecode::Instruction> {
+fn compile_expression (expression: &Expression, symbol_table: &mut SymbolTable) 
+-> (Vec<Instruction>, usize) {
+
+    match expression {
+        Expression::Function{signature, body} => {
+            compile_function(&signature, &body.kind, symbol_table)
+        },
+        Expression::Assignment{lhs, rhs} => {
+            compile_assignment(&lhs.kind, &rhs.kind, symbol_table)
+        },
+        Expression::Unary { op, expression } => {
+            (Vec::new(), 0)
+        },
+        Expression::Binary { lhs, op, rhs } => {
+            compile_binary_expression(&lhs.kind, op, &rhs.kind, symbol_table)
+        }
+        Expression::FunctionCall { callee, arguments } => {
+            compile_function_call(&callee.kind, arguments, symbol_table)
+        }
+        _ => {
+            (Vec::new(), 0)
+        }
+    }
+}
+
+fn compile_binary_expression (lhs: &Expression, op: &BinaryOp, rhs: &Expression, symbol_table: &mut SymbolTable) 
+-> Vec<Instruction> {
     let mut bytecode = Vec::new();
 
-    bytecode.append(&mut compile_expression(&binary_expression.rhs, symbol_table));
+    bytecode.append(&mut compile_expression(&lhs, symbol_table));
 
-    bytecode.push(bytecode::Instruction::Mov(1, 0));
+    bytecode.append(&mut compile_expression(&rhs, symbol_table));
 
-    bytecode.append(&mut compile_expression(&binary_expression.lhs, symbol_table));
+    bytecode.push(Instruction::Mov(1, 0));
     
-    use ast::BinaryOperator as BinaryOperator;
+    use BinaryOp as BinaryOp;
     
-    bytecode.push(match binary_expression.operator {
-        BinaryOperator::Addition => {
-            bytecode::Instruction::Add(0, 1)
+    bytecode.push(match op {
+        BinaryOp::Add => {
+            Instruction::Add(0, 1)
         }
-        BinaryOperator::Subtraction => {
-            bytecode::Instruction::Sub(0, 1)
+        BinaryOp::Sub => {
+            Instruction::Sub(0, 1)
         }
-        BinaryOperator::Multiplication => {
-            bytecode::Instruction::Mul(0, 1)
+        BinaryOp::Mul => {
+            Instruction::Mul(0, 1)
         }
-        BinaryOperator::Division => {
-            bytecode::Instruction::Div(0, 1)
+        BinaryOp::Div => {
+            Instruction::Div(0, 1)
         }
-        BinaryOperator::Mod => {
-            bytecode::Instruction::Mod(0, 1)
+        BinaryOp::Mod => {
+            Instruction::Mod(0, 1)
+        }
+        _ => {
+            Instruction::Add(0, 1)
         }
     });
 
     bytecode
 }
 
-pub fn compile_print (symbol: &ast::Symbol, symbol_table: &mut SymbolTable) 
--> Vec<bytecode::Instruction> {
+fn compile_function_call (callee: &Expression, arguments: &Vec<Node<Expression>>, symbol_table: &mut SymbolTable) 
+-> Vec<Instruction> {
     let mut bytecode = Vec::new();
-    if let Some(register_id) = symbol_table.get_variable(&symbol.name) {
-        bytecode.push(bytecode::Instruction::Print(*register_id));
+    for (i, arg) in arguments.iter().enumerate() {
+        bytecode.append(&mut compile_expression(&arg.kind, symbol_table));
+        bytecode.push(Instruction::Mov(i+1, 0));
     }
-    
+    bytecode.append(&mut compile_expression(callee, symbol_table));
+    bytecode.push(Instruction::Call(0));
     bytecode
 }

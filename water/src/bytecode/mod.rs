@@ -7,6 +7,7 @@ pub enum Instruction {
     Print(usize),
     Halt,
     Jmp(usize),
+    Call(usize),
     Add(usize, usize),
     Sub(usize, usize),
     Mul(usize, usize),
