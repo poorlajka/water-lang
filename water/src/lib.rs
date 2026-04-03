@@ -30,6 +30,12 @@ pub fn run_program(program_path: &str) {
     */
     let lexer::LexingArtifacts { tokens, errors } = lexer::tokenize(&code);
 
+    /*
+    for t in &tokens {
+        println!("{:?}", t);
+    }
+    */
+
     for _error in &errors {
         diagnostics.push(
             Diagnostic {
@@ -76,7 +82,4 @@ pub fn run_program(program_path: &str) {
         Execute bytecode
     */
     vm::exec(&bytecode.main, &bytecode.functions);
-    for inst in &bytecode.main {
-        println!("{:?}", inst);
-    }
 }

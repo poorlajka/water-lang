@@ -121,7 +121,9 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
                 print_expression(&else_expr.kind, &new_prefix, true);
             }
         }
-        Expression::FunctionCall { .. } => {}
+        Expression::FunctionCall { .. } => {
+            println!("Functioncall");
+        }
         Expression::Function { signature, body } => {
             println!("Function");
 

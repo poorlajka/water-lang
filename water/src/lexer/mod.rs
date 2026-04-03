@@ -41,13 +41,13 @@ pub struct LexingArtifacts {
 
 pub fn tokenize(code: &str) -> LexingArtifacts {
     let mut lexing_artifacts = LexingArtifacts {
-        tokens: vec![(Token::LParen, 2..3)], // Insert a dummy first token to make parser code cleaner
+        tokens: vec![(Token::LParen, 2..3)],
         errors: Vec::new(),
     };
 
     let mut lexer = Token::lexer(code).spanned();
 
-    let mut old_indent = 0;
+    let mut indent_stack: Vec<usize> = vec![0]; // stack of indent levels, starting at 0
 
     while let Some((token, span)) = lexer.next() {
         match token.clone() {
@@ -64,13 +64,22 @@ pub fn tokenize(code: &str) -> LexingArtifacts {
                 .collect();
             let new_indent = count_columns(&leading_ws);
 
-            if new_indent > old_indent {
+            let current_indent = *indent_stack.last().unwrap();
+
+            if new_indent > current_indent {
+                indent_stack.push(new_indent);
                 lexing_artifacts.tokens.push((Token::Indent, span.clone()));
+            } else if new_indent < current_indent {
+                // Pop and emit a Dedent for every level we've exited
+                while *indent_stack.last().unwrap() > new_indent {
+                    indent_stack.pop();
+                    lexing_artifacts.tokens.push((Token::Dedent, span.clone()));
+                }
+                // Optional: handle mismatched dedent (new_indent doesn't match any prior level)
+                if *indent_stack.last().unwrap() != new_indent {
+                    lexing_artifacts.errors.push((LexingError::Other, span.clone()));
+                }
             }
-            else if new_indent < old_indent {
-                lexing_artifacts.tokens.push((Token::Dedent, span.clone()));
-            }
-            old_indent = new_indent;
         }
     }
 

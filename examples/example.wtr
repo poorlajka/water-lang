@@ -1,6 +1,0 @@
-
-my_func = (x, y) => 
-    x + y
-
-res = my_func(1, 2)
-print(res)

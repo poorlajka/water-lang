@@ -109,22 +109,22 @@ impl Compiler {
     fn compile_assignment (&mut self, lhs: &Pattern, rhs: &Expression, symbol_table: &mut SymbolTable) 
     -> (Vec<Instruction>, usize) {
         let mut bytecode = Vec::new();
-        let (mut expr, rhs_reg) = self.compile_expression(&rhs, symbol_table);
 
-        bytecode.append(&mut expr);
-        match &lhs{
+        let lhs_reg = match &lhs{
             Pattern::Identifier(ident) => {
-                let lhs_reg = symbol_table.register_variable(ident);
-                bytecode.push(
-                    Instruction::Mov(
-                        lhs_reg,
-                        rhs_reg,
-                    ));
+                symbol_table.register_variable(ident)
             }
             _ => {
-
+                99
             }
-        }
+        };
+        let (mut expr, rhs_reg) = self.compile_expression(&rhs, symbol_table);
+        bytecode.append(&mut expr);
+        bytecode.push(
+            Instruction::Mov(
+                lhs_reg,
+                rhs_reg,
+            ));
 
         (bytecode, rhs_reg)
     }
@@ -141,7 +141,7 @@ impl Compiler {
                     }
                     _ => {
                         let reg = symbol_table.get_variable(name);
-                        (Vec::new(), *reg.expect("variable was not found fix this later")) 
+                        (Vec::new(), *reg.expect(&format!("variable {} was not found fix this later", name))) 
                     }
                 }
             }
@@ -157,6 +157,14 @@ impl Compiler {
             },
             Expression::Assignment{lhs, rhs} => {
                 self.compile_assignment(&lhs.kind, &rhs.kind, symbol_table)
+            },
+            Expression::Conditional { condition, then_branch, else_branch } => {
+                self.compile_conditional(
+                    &condition.kind, 
+                    &then_branch.kind, 
+                    &else_branch,
+                    symbol_table,
+                )
             },
             Expression::Unary { op, expression } => {
                 (Vec::new(), 0)
@@ -183,28 +191,47 @@ impl Compiler {
         let (mut rhs_code, rhs_reg) = self.compile_expression(&rhs, symbol_table);
         bytecode.append(&mut rhs_code);
 
+        let res_reg = symbol_table.register_intermediate();
         bytecode.push(match op {
             BinaryOp::Add => {
-                Instruction::Add(lhs_reg, rhs_reg)
+                Instruction::Add(res_reg, lhs_reg, rhs_reg)
             }
             BinaryOp::Sub => {
-                Instruction::Sub(lhs_reg, rhs_reg)
+                Instruction::Sub(res_reg, lhs_reg, rhs_reg)
             }
             BinaryOp::Mul => {
-                Instruction::Mul(lhs_reg, rhs_reg)
+                Instruction::Mul(res_reg, lhs_reg, rhs_reg)
             }
             BinaryOp::Div => {
-                Instruction::Div(lhs_reg, rhs_reg)
+                Instruction::Div(res_reg, lhs_reg, rhs_reg)
             }
             BinaryOp::Mod => {
-                Instruction::Mod(lhs_reg, rhs_reg)
+                Instruction::Mod(res_reg, lhs_reg, rhs_reg)
+            }
+            BinaryOp::LEq => {
+                Instruction::LEq(res_reg, lhs_reg, rhs_reg)
+            }
+            BinaryOp::Lt => {
+                Instruction::LT(res_reg, lhs_reg, rhs_reg)
+            }
+            BinaryOp::GEq => {
+                Instruction::GEq(res_reg, lhs_reg, rhs_reg)
+            }
+            BinaryOp::Gt => {
+                Instruction::GT(res_reg, lhs_reg, rhs_reg)
+            }
+            BinaryOp::Eq => {
+                Instruction::Eq(res_reg, lhs_reg, rhs_reg)
+            }
+            BinaryOp::NEq => {
+                Instruction::NEq(res_reg, lhs_reg, rhs_reg)
             }
             _ => {
-                Instruction::Add(lhs_reg, rhs_reg)
+                Instruction::Add(res_reg, lhs_reg, rhs_reg)
             }
         });
 
-        (bytecode, lhs_reg)
+        (bytecode, res_reg)
     }
 
     fn compile_block (&mut self, statements: &Vec<Statement>, final_expr: &Option<Box<Node<Expression>>>, symbol_table: &mut SymbolTable) 
@@ -228,6 +255,38 @@ impl Compiler {
         };
 
         (bytecode, expr_reg)
+    }
+
+    fn compile_conditional (&mut self, condition: &Expression, then_branch: &Expression, else_branch: &Option<Box<Node<Expression>>>, symbol_table: &mut SymbolTable) 
+    -> (Vec<Instruction>, usize) {
+        let mut bytecode = Vec::new();
+        let (mut cond_code, cond_reg) = self.compile_expression(condition, symbol_table);
+        bytecode.append(&mut cond_code);
+
+        let (mut then_code, then_reg) = self.compile_expression(then_branch, symbol_table);
+
+        let final_reg = symbol_table.register_intermediate();
+
+        if let Some(els) = else_branch {
+            let jump = Instruction::JmpCond(then_code.len()+1, cond_reg);
+            bytecode.push(jump);
+            bytecode.append(&mut then_code);
+
+            let (mut els_code, els_reg) = self.compile_expression(&els.kind, symbol_table);
+
+            let jump = Instruction::Jmp(els_code.len());
+            bytecode.push(jump);
+            bytecode.append(&mut els_code);
+            bytecode.push(Instruction::Mov(final_reg, els_reg));
+        }
+        else {
+            let jump = Instruction::JmpCond(then_code.len()+1, cond_reg);
+            bytecode.push(jump);
+            bytecode.append(&mut then_code);
+            bytecode.push(Instruction::Mov(final_reg, then_reg));
+        };
+
+        (bytecode, final_reg)
     }
 
     fn compile_function_call (&mut self, callee: &Expression, arguments: &Vec<Node<Expression>>, symbol_table: &mut SymbolTable) 

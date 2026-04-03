@@ -127,8 +127,8 @@ fn parse_prefix(
             }
         }
 
-        Some((_, span)) => Err(ParsingError::new(
-            "Unexpected token {:?} in prefix",
+        Some((token, span)) => Err(ParsingError::new(
+            &format!("Unexpected token {:?} in prefix", token),
             Some(span),
         )),
         None => Err(ParsingError::new("Unexpected end of input", None)),
@@ -306,7 +306,7 @@ fn parse_block(
         token_stream.skip_newlines();
         match token_stream.peek() {
             Some((Token::Dedent, block_span_end)) => {
-                token_stream.next(); // consume }
+                token_stream.next();
                 break block_span_end;
             }
             None => {
@@ -359,6 +359,7 @@ fn parse_conditional(
     let else_branch = match token_stream.peek() {
         Some((Token::Else, _span)) => {
             token_stream.next();
+            token_stream.skip_newlines();
             if matches!(token_stream.peek(), Some((Token::Indent, _))) {
                 Some(Box::new(parse_block(token_stream)?))
             }

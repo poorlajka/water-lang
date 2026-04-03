@@ -68,6 +68,7 @@ fn parse_statement(
             match token_stream.peek() {
                 None
                 | Some((Token::Newline, _))
+                | Some((Token::Dedent, _))
                 | Some((Token::Eof, _)) => {
                     return Ok(Statement::Expression(expression));
                 }
