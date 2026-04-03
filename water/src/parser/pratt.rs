@@ -445,7 +445,6 @@ fn parse_lambda_after_paren(
 
     token_stream.skip_newlines();
     let body = if let Some((Token::Indent, _)) = token_stream.peek() {
-        println!("hello");
         parse_block(token_stream)?
     }
     else {

@@ -4,6 +4,7 @@ pub mod parser;
 pub mod diagnostics;
 pub mod codegen;
 pub mod bytecode;
+pub mod vm;
 
 use std::fs;
 
@@ -61,24 +62,21 @@ pub fn run_program(program_path: &str) {
         );
     }
 
-    ast::display::print_ast(&ast);
+    //ast::display::print_ast(&ast);
 
     emitter::emit_diagnostics(&code, &diagnostics);
 
     /*
-    }
-        */
-
-    /*
             Compile AST to bytecode
 
-        let lang_compiler::CompilerArtifacts {
-            bytecode,
-            errors,
-        } = lang_compiler::compile(&ast);
     */
+    let bytecode = codegen::compile_module(&ast);
+
     /*
         Execute bytecode
     */
-    //let exit_status = lang_vm::exec(&bytecode);
+    vm::exec(&bytecode.main, &bytecode.functions);
+    for inst in &bytecode.main {
+        println!("{:?}", inst);
+    }
 }

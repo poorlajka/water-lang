@@ -1,3 +1,6 @@
-myfunc = (arg1, arg2, arg3) => 
-    i = 2
-    mysecondfunc = (arg5) => 5 9
+
+my_func = (x, y) => 
+    x + y
+
+res = my_func(1, 2)
+print(res)

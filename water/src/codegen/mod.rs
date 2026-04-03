@@ -1,15 +1,16 @@
-use crate::ast::{Expression, Node, Pattern, FunctionSignature, Module};
+use crate::ast::{Expression, Node, Pattern, FunctionSignature, Module, Statement, BinaryOp, UnaryOp};
 use crate::bytecode::Instruction;
 
 use std::collections::HashMap;
+use std::env::VarsOs;
 
-pub struct ByteCode {
+pub struct Compiler {
+    pub main: Vec<Instruction>,
     pub functions: Vec<CompiledFunction>,
 }
 
 pub struct CompiledFunction {
     pub code_block: Vec<Instruction>,
-    pub symbol_table: SymbolTable,
 }
 
 struct SymbolTable {
@@ -21,12 +22,17 @@ impl SymbolTable {
     fn new () -> Self {
         Self {
             symbols: HashMap::new(),
-            reg_top: 2,
+            reg_top: 10,
         }
     }
 
     fn register_variable (&mut self, name: &str) -> usize {
         self.symbols.insert(name.to_string(), self.reg_top);
+        self.reg_top += 1;
+        self.reg_top - 1 
+    }
+
+    fn register_intermediate (&mut self) -> usize {
         self.reg_top += 1;
         self.reg_top - 1 
     }
@@ -37,150 +43,207 @@ impl SymbolTable {
     
 }
 
-pub fn compile_module (module: &Module) -> ByteCode {
+pub fn compile_module (module: &Module) -> Compiler {
     let mut symbol_table = SymbolTable::new();
-    let mut bytecode = Vec::new();
-
-    for statement in &module.statements {
-        bytecode.append(&mut compile_statement(statement, &mut symbol_table));
-    }
-
-    let compiler_artifacts = CompilerArtifacts {
-        bytecode,
-        errors: Vec::new(),
+    let mut compiler = Compiler {
+        main: Vec::new(),
+        functions: vec![CompiledFunction{code_block: Vec::new()}],
     };
 
-    compiler_artifacts
+    for statement in &module.statements {
+        let mut compiled_statement = compiler.compile_statement(statement, &mut symbol_table);
+        compiler.main.append(&mut compiled_statement);
+    }
+
+    compiler
 }
 
-fn compile_function (signature: &FunctionSignature, body: &Expression, symbol_table: &mut SymbolTable) 
--> Vec<Instruction> {
+impl Compiler {
 
-    let mut bytecode = Vec::new();
+    fn compile_function (&mut self, signature: &FunctionSignature, body: &Expression, symbol_table: &mut SymbolTable) 
+    -> (Vec<Instruction>, usize) {
 
-    for arg in &signature.args {
-        match &arg.kind {
+        let mut bytecode = Vec::new();
+
+        let function_index = self.functions.len();
+        for (i, arg) in signature.args.iter().enumerate() {
+            match &arg.kind {
+                Pattern::Identifier(ident) => {
+                    let reg = symbol_table.register_variable(ident);
+                    bytecode.push(Instruction::Mov(reg, i+1))
+                }
+                _ => {
+
+                }
+            }
+        }
+
+        let (mut body_code, result_reg) = self.compile_expression(body, symbol_table);
+        bytecode.append(&mut body_code);
+        bytecode.push(Instruction::Mov(0, result_reg));
+        self.functions.push(CompiledFunction { code_block: bytecode });
+
+        let reg = symbol_table.register_intermediate();
+        (vec![Instruction::MovConst(reg, function_index as i64)], reg)
+    }
+
+    fn compile_statement (&mut self, statement: &Statement, symbol_table: &mut SymbolTable) 
+    -> Vec<Instruction> {
+        let mut bytecode = Vec::new();
+
+        use Statement as Statement;
+        match statement {
+            Statement::Expression(expression) => {
+                let (mut expr, reg) = self.compile_expression(&expression.kind, symbol_table);
+                bytecode.append(&mut expr);
+            },
+            Statement::Return(return_statement) => {
+
+            },
+        }
+
+        bytecode
+
+    }
+
+    fn compile_assignment (&mut self, lhs: &Pattern, rhs: &Expression, symbol_table: &mut SymbolTable) 
+    -> (Vec<Instruction>, usize) {
+        let mut bytecode = Vec::new();
+        let (mut expr, rhs_reg) = self.compile_expression(&rhs, symbol_table);
+
+        bytecode.append(&mut expr);
+        match &lhs{
             Pattern::Identifier(ident) => {
-
+                let lhs_reg = symbol_table.register_variable(ident);
+                bytecode.push(
+                    Instruction::Mov(
+                        lhs_reg,
+                        rhs_reg,
+                    ));
             }
             _ => {
 
             }
         }
+
+        (bytecode, rhs_reg)
     }
 
-    bytecode.append(&mut compile_expression(body, symbol_table));
+    fn compile_expression (&mut self, expression: &Expression, symbol_table: &mut SymbolTable) 
+    -> (Vec<Instruction>, usize) {
 
-    bytecode
-}
-
-fn compile_statement (statement: &Statement, symbol_table: &mut SymbolTable) 
--> Vec<Instruction> {
-    let mut bytecode = Vec::new();
-
-    use Statement as Statement;
-    match statement {
-        Statement::Expression(expression) => {
-            bytecode.append(&mut compile_expression(&expression.kind, symbol_table));
-
-        },
-        Statement::Return(return_statement) => {
-
-        },
-    }
-
-    bytecode
-
-}
-
-fn compile_assignment (lhs: &Pattern, rhs: &Expression, symbol_table: &mut SymbolTable) 
--> Vec<Instruction> {
-    let mut bytecode = Vec::new();
-    bytecode.append(&mut compile_expression(&rhs, symbol_table));
-    match &lhs{
-        Pattern::Identifier(ident) => {
-            bytecode.push(
-                Instruction::Mov(
-                    symbol_table.register_variable(ident), 
-                    0,
-                ));
-        }
-        _ => {
-
-        }
-    }
-    bytecode
-}
-
-fn compile_expression (expression: &Expression, symbol_table: &mut SymbolTable) 
--> (Vec<Instruction>, usize) {
-
-    match expression {
-        Expression::Function{signature, body} => {
-            compile_function(&signature, &body.kind, symbol_table)
-        },
-        Expression::Assignment{lhs, rhs} => {
-            compile_assignment(&lhs.kind, &rhs.kind, symbol_table)
-        },
-        Expression::Unary { op, expression } => {
-            (Vec::new(), 0)
-        },
-        Expression::Binary { lhs, op, rhs } => {
-            compile_binary_expression(&lhs.kind, op, &rhs.kind, symbol_table)
-        }
-        Expression::FunctionCall { callee, arguments } => {
-            compile_function_call(&callee.kind, arguments, symbol_table)
-        }
-        _ => {
-            (Vec::new(), 0)
+        match expression {
+            Expression::Identifier(name) => {
+                match name.as_str() {
+                    "print" => {
+                        let reg = symbol_table.register_intermediate();
+                        (vec![Instruction::MovConst(reg, 0)], reg)
+                    }
+                    _ => {
+                        let reg = symbol_table.get_variable(name);
+                        (Vec::new(), *reg.expect("variable was not found fix this later")) 
+                    }
+                }
+            }
+            Expression::Integer(value) => {
+                let reg = symbol_table.register_intermediate();
+                (vec![Instruction::MovConst(reg, *value)], reg) 
+            }
+            Expression::Block { statements, final_expr } => {
+                self.compile_block(&statements, final_expr, symbol_table)
+            },
+            Expression::Function{signature, body} => {
+                self.compile_function(&signature, &body.kind, symbol_table)
+            },
+            Expression::Assignment{lhs, rhs} => {
+                self.compile_assignment(&lhs.kind, &rhs.kind, symbol_table)
+            },
+            Expression::Unary { op, expression } => {
+                (Vec::new(), 0)
+            },
+            Expression::Binary { lhs, op, rhs } => {
+                self.compile_binary_expression(&lhs.kind, op, &rhs.kind, symbol_table)
+            }
+            Expression::FunctionCall { callee, arguments } => {
+                self.compile_function_call(&callee.kind, arguments, symbol_table)
+            }
+            _ => {
+                (Vec::new(), 0)
+            }
         }
     }
-}
 
-fn compile_binary_expression (lhs: &Expression, op: &BinaryOp, rhs: &Expression, symbol_table: &mut SymbolTable) 
--> Vec<Instruction> {
-    let mut bytecode = Vec::new();
+    fn compile_binary_expression (&mut self, lhs: &Expression, op: &BinaryOp, rhs: &Expression, symbol_table: &mut SymbolTable) 
+    -> (Vec<Instruction>, usize) {
+        let mut bytecode = Vec::new();
 
-    bytecode.append(&mut compile_expression(&lhs, symbol_table));
+        let (mut lhs_code, lhs_reg) = self.compile_expression(&lhs, symbol_table);
+        bytecode.append(&mut lhs_code);
 
-    bytecode.append(&mut compile_expression(&rhs, symbol_table));
+        let (mut rhs_code, rhs_reg) = self.compile_expression(&rhs, symbol_table);
+        bytecode.append(&mut rhs_code);
 
-    bytecode.push(Instruction::Mov(1, 0));
-    
-    use BinaryOp as BinaryOp;
-    
-    bytecode.push(match op {
-        BinaryOp::Add => {
-            Instruction::Add(0, 1)
-        }
-        BinaryOp::Sub => {
-            Instruction::Sub(0, 1)
-        }
-        BinaryOp::Mul => {
-            Instruction::Mul(0, 1)
-        }
-        BinaryOp::Div => {
-            Instruction::Div(0, 1)
-        }
-        BinaryOp::Mod => {
-            Instruction::Mod(0, 1)
-        }
-        _ => {
-            Instruction::Add(0, 1)
-        }
-    });
+        bytecode.push(match op {
+            BinaryOp::Add => {
+                Instruction::Add(lhs_reg, rhs_reg)
+            }
+            BinaryOp::Sub => {
+                Instruction::Sub(lhs_reg, rhs_reg)
+            }
+            BinaryOp::Mul => {
+                Instruction::Mul(lhs_reg, rhs_reg)
+            }
+            BinaryOp::Div => {
+                Instruction::Div(lhs_reg, rhs_reg)
+            }
+            BinaryOp::Mod => {
+                Instruction::Mod(lhs_reg, rhs_reg)
+            }
+            _ => {
+                Instruction::Add(lhs_reg, rhs_reg)
+            }
+        });
 
-    bytecode
-}
-
-fn compile_function_call (callee: &Expression, arguments: &Vec<Node<Expression>>, symbol_table: &mut SymbolTable) 
--> Vec<Instruction> {
-    let mut bytecode = Vec::new();
-    for (i, arg) in arguments.iter().enumerate() {
-        bytecode.append(&mut compile_expression(&arg.kind, symbol_table));
-        bytecode.push(Instruction::Mov(i+1, 0));
+        (bytecode, lhs_reg)
     }
-    bytecode.append(&mut compile_expression(callee, symbol_table));
-    bytecode.push(Instruction::Call(0));
-    bytecode
+
+    fn compile_block (&mut self, statements: &Vec<Statement>, final_expr: &Option<Box<Node<Expression>>>, symbol_table: &mut SymbolTable) 
+    -> (Vec<Instruction>, usize) {
+
+        let mut bytecode = Vec::new();
+
+        for statement in statements {
+            let mut compiled_statement = self.compile_statement(statement, symbol_table);
+            bytecode.append(&mut compiled_statement);
+        }
+
+        let expr_reg = if let Some(expr) = final_expr {
+            let (mut expr_code, expr_reg) = self.compile_expression(&expr.kind, symbol_table);
+            bytecode.append(&mut expr_code);
+
+            expr_reg
+        }
+        else {
+            0
+        };
+
+        (bytecode, expr_reg)
+    }
+
+    fn compile_function_call (&mut self, callee: &Expression, arguments: &Vec<Node<Expression>>, symbol_table: &mut SymbolTable) 
+    -> (Vec<Instruction>, usize) {
+        let mut bytecode = Vec::new();
+        for (i, arg) in arguments.iter().enumerate() {
+            let (mut arg_code, arg_reg) = self.compile_expression(&arg.kind, symbol_table);
+            bytecode.append(&mut arg_code);
+            bytecode.push(Instruction::Mov(i+1, arg_reg));
+        }
+
+        let (mut callee_code, callee_reg) = self.compile_expression(callee, symbol_table);
+        bytecode.append(&mut callee_code);
+
+        bytecode.push(Instruction::Call(callee_reg));
+
+        (bytecode, 0)
+    }
 }
