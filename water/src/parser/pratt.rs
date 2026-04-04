@@ -68,6 +68,7 @@ fn infix_binding_power(tok: &Token) -> Option<(u8, u8, BinaryOp)> {
         Token::Minus => Some((10, 11, BinaryOp::Sub)),
         Token::Star => Some((20, 21, BinaryOp::Mul)),
         Token::Slash => Some((20, 21, BinaryOp::Div)),
+        Token::Percent => Some((20, 21, BinaryOp::Mod)),
 
         Token::And => Some((3, 4, BinaryOp::And)),
         Token::Or => Some((2, 3, BinaryOp::Or)),
@@ -356,6 +357,8 @@ fn parse_conditional(
         _ => parse_block(token_stream)?,
     };
 
+    token_stream.save_pos();
+    token_stream.skip_newlines();
     let else_branch = match token_stream.peek() {
         Some((Token::Else, _span)) => {
             token_stream.next();
@@ -367,7 +370,10 @@ fn parse_conditional(
                 Some(Box::new(parse_expression(token_stream, 0)?))
             }
         }
-        _ => None,
+        _ => {
+            token_stream.backtrack();
+            None
+        }
     };
 
     let conditional_span = match &else_branch {

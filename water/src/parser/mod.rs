@@ -70,9 +70,11 @@ fn parse_statement(
                 | Some((Token::Newline, _))
                 | Some((Token::Dedent, _))
                 | Some((Token::Eof, _)) => {
+                    token_stream.skip_newlines();
                     return Ok(Statement::Expression(expression));
                 }
                 Some((tok, span)) => {
+                    println!("end of statement err {:?}", tok);
                     return Err(ParsingError::new("Unterminated expression, expected newline or eof.", Some(span)));
                 }
             }

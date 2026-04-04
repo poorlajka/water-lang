@@ -30,11 +30,9 @@ pub fn run_program(program_path: &str) {
     */
     let lexer::LexingArtifacts { tokens, errors } = lexer::tokenize(&code);
 
-    /*
     for t in &tokens {
         println!("{:?}", t);
     }
-    */
 
     for _error in &errors {
         diagnostics.push(
@@ -68,7 +66,7 @@ pub fn run_program(program_path: &str) {
         );
     }
 
-    //ast::display::print_ast(&ast);
+    ast::display::print_ast(&ast);
 
     emitter::emit_diagnostics(&code, &diagnostics);
 

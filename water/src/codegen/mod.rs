@@ -268,22 +268,22 @@ impl Compiler {
         let final_reg = symbol_table.register_intermediate();
 
         if let Some(els) = else_branch {
-            let jump = Instruction::JmpCond(then_code.len()+1, cond_reg);
+            let jump = Instruction::JmpCond(then_code.len()+2, cond_reg);
             bytecode.push(jump);
             bytecode.append(&mut then_code);
+            bytecode.push(Instruction::Mov(final_reg, then_reg));
 
             let (mut els_code, els_reg) = self.compile_expression(&els.kind, symbol_table);
 
-            let jump = Instruction::Jmp(els_code.len());
+            let jump = Instruction::Jmp(els_code.len()+1);
             bytecode.push(jump);
             bytecode.append(&mut els_code);
             bytecode.push(Instruction::Mov(final_reg, els_reg));
         }
         else {
-            let jump = Instruction::JmpCond(then_code.len()+1, cond_reg);
+            let jump = Instruction::JmpCond(then_code.len(), cond_reg);
             bytecode.push(jump);
             bytecode.append(&mut then_code);
-            bytecode.push(Instruction::Mov(final_reg, then_reg));
         };
 
         (bytecode, final_reg)

@@ -1,13 +1,15 @@
 
-my_func = (a, b) =>
-    if a < b
-        print(1)
-    else if a > b 
-        print(2)
-    else
-        print(3)
+func = (a) =>
 
-    my_func(1, 2)
+    if a < 5
+        1
+    else 
+        11
 
+    if a < 5
+        1
+    else 
+        10
 
-my_func(3,3)
+print(func(5))
+
