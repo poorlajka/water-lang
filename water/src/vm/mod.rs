@@ -72,12 +72,27 @@ impl VM {
                         _ => {
                             let function = &functions[index as usize];
                             
+                            // Save caller's frame
+                            let saved_registers = self.gp_registers;
                             let old_ip = self.ip;
+
                             self.ip = 0;
                             self.exec_bytecode(&function.code_block, functions);
+
+                            // Capture return value before restoring
+                            let return_value = self.gp_registers[0];
+
+                            // Restore caller's frame
+                            self.gp_registers = saved_registers;
                             self.ip = old_ip;
+
+                            // Write return value into the restored frame
+                            self.gp_registers[0] = return_value;
                         }
                     }
+                }
+                Instruction::Return => {
+                    self.ip = bytecode.len();
                 }
                 Instruction::Add(r1, r2, r3) => {
                     self.gp_registers[*r1] = self.gp_registers[*r2] + self.gp_registers[*r3];

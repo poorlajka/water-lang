@@ -121,8 +121,18 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
                 print_expression(&else_expr.kind, &new_prefix, true);
             }
         }
-        Expression::FunctionCall { .. } => {
+        Expression::FunctionCall { callee, arguments} => {
             println!("Functioncall");
+
+            let new_prefix =
+                format!("{prefix}{}", if is_last { "    " } else { "│   " });
+
+            print_expression(&callee.kind, &new_prefix, is_last);
+
+            for arg in arguments{
+                print_expression(&arg.kind, &new_prefix, is_last);
+            }
+
         }
         Expression::Function { signature, body } => {
             println!("Function");

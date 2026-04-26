@@ -63,26 +63,23 @@ fn parse_statement(
 ) -> Result<Statement, ParsingError> {
     token_stream.skip_newlines();
     token_stream.save_pos();
+
+    if let Some((Token::Return, _)) = token_stream.peek() {
+        token_stream.next();
+        let value = match token_stream.peek() {
+            None | Some((Token::Newline, _)) | Some((Token::Dedent, _)) | Some((Token::Eof, _)) => None,
+            _ => Some(pratt::parse_expression(token_stream, 0)?),
+        };
+        token_stream.expect_statement_end()?;
+        return Ok(Statement::Return(value));
+    }
+
     match pratt::parse_expression(token_stream, 0) {
         Ok(expression) => {
-            match token_stream.peek() {
-                None
-                | Some((Token::Newline, _))
-                | Some((Token::Dedent, _))
-                | Some((Token::Eof, _)) => {
-                    token_stream.skip_newlines();
-                    return Ok(Statement::Expression(expression));
-                }
-                Some((tok, span)) => {
-                    println!("end of statement err {:?}", tok);
-                    return Err(ParsingError::new("Unterminated expression, expected newline or eof.", Some(span)));
-                }
-            }
+            token_stream.expect_statement_end()?;
+            Ok(Statement::Expression(expression))
         }
-        Err(error) => {
-            //token_stream.backtrack();
-            return Err(error)
-        }
+        Err(error) => Err(error),
     }
 
 }

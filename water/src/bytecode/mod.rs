@@ -9,6 +9,7 @@ pub enum Instruction {
     Jmp(usize),
     JmpCond(usize, usize),
     Call(usize),
+    Return,
 
     Add(usize, usize, usize),
     Sub(usize, usize, usize),

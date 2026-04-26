@@ -106,6 +106,10 @@ pub enum Token {
     #[token("else")]
     Else,
 
+    #[token("return")]
+    Return,
+
+    #[token("\r\n")]
     #[token("\n")]
     #[token(";")]
     Newline,

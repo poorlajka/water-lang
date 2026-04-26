@@ -1,5 +1,5 @@
 use crate::ast::{Expression, Node, Pattern, FunctionSignature, Module, Statement, BinaryOp, UnaryOp};
-use crate::bytecode::Instruction;
+use crate::bytecode::{self, Instruction};
 
 use std::collections::HashMap;
 use std::env::VarsOs;
@@ -14,20 +14,23 @@ pub struct CompiledFunction {
 }
 
 struct SymbolTable {
-    symbols: HashMap<String, usize>,
+    scopes: Vec<(HashMap<String, usize>, usize)>,
     reg_top: usize,
 }
 
 impl SymbolTable {
     fn new () -> Self {
         Self {
-            symbols: HashMap::new(),
+            scopes: vec![],
             reg_top: 10,
         }
     }
 
     fn register_variable (&mut self, name: &str) -> usize {
-        self.symbols.insert(name.to_string(), self.reg_top);
+        self.scopes.last_mut()
+            .expect("If this happens it means the global scope is somehow closed")
+            .0.insert(name.to_string(), self.reg_top);
+
         self.reg_top += 1;
         self.reg_top - 1 
     }
@@ -37,14 +40,27 @@ impl SymbolTable {
         self.reg_top - 1 
     }
 
-    fn get_variable (&self, name: &str) -> Option<&usize> {
-        self.symbols.get(name)
+    fn push_scope(&mut self) { 
+        self.scopes.push((HashMap::new(), self.reg_top)); 
+    }
+
+    fn pop_scope(&mut self) { 
+        if let Some((_, watermark)) = self.scopes.pop() {
+            self.reg_top = watermark;
+        }
+    }
+
+    fn get_variable(&self, name: &str) -> Option<usize> {
+        // Walk scopes from innermost outward
+        self.scopes.iter().rev()
+            .find_map(|scope| scope.0.get(name).copied())
     }
     
 }
 
 pub fn compile_module (module: &Module) -> Compiler {
     let mut symbol_table = SymbolTable::new();
+    symbol_table.push_scope();
     let mut compiler = Compiler {
         main: Vec::new(),
         functions: vec![CompiledFunction{code_block: Vec::new()}],
@@ -63,6 +79,7 @@ impl Compiler {
     fn compile_function (&mut self, signature: &FunctionSignature, body: &Expression, symbol_table: &mut SymbolTable) 
     -> (Vec<Instruction>, usize) {
 
+        symbol_table.push_scope();
         let mut bytecode = Vec::new();
 
         let function_index = self.functions.len();
@@ -83,6 +100,7 @@ impl Compiler {
         bytecode.push(Instruction::Mov(0, result_reg));
         self.functions.push(CompiledFunction { code_block: bytecode });
 
+        symbol_table.pop_scope();
         let reg = symbol_table.register_intermediate();
         (vec![Instruction::MovConst(reg, function_index as i64)], reg)
     }
@@ -97,8 +115,19 @@ impl Compiler {
                 let (mut expr, reg) = self.compile_expression(&expression.kind, symbol_table);
                 bytecode.append(&mut expr);
             },
-            Statement::Return(return_statement) => {
+            Statement::Return(expr) => {
 
+                match expr {
+                    Some(expr) => {
+                        let (mut expr_code, expr_reg) = self.compile_expression(&expr.kind, symbol_table);
+                        bytecode.append(&mut expr_code);
+                        bytecode.push(Instruction::Mov(0, expr_reg));
+                    }
+                    None => {
+
+                    }
+                }
+                bytecode.push(Instruction::Return);
             },
         }
 
@@ -141,7 +170,7 @@ impl Compiler {
                     }
                     _ => {
                         let reg = symbol_table.get_variable(name);
-                        (Vec::new(), *reg.expect(&format!("variable {} was not found fix this later", name))) 
+                        (Vec::new(), reg.expect(&format!("variable {} was not found fix this later", name))) 
                     }
                 }
             }
@@ -237,6 +266,7 @@ impl Compiler {
     fn compile_block (&mut self, statements: &Vec<Statement>, final_expr: &Option<Box<Node<Expression>>>, symbol_table: &mut SymbolTable) 
     -> (Vec<Instruction>, usize) {
 
+        symbol_table.push_scope();
         let mut bytecode = Vec::new();
 
         for statement in statements {
@@ -244,17 +274,26 @@ impl Compiler {
             bytecode.append(&mut compiled_statement);
         }
 
-        let expr_reg = if let Some(expr) = final_expr {
+        let final_expr_reg = if let Some(expr) = final_expr {
             let (mut expr_code, expr_reg) = self.compile_expression(&expr.kind, symbol_table);
             bytecode.append(&mut expr_code);
 
-            expr_reg
+            Some(expr_reg)
         }
         else {
-            0
+            None
         };
 
-        (bytecode, expr_reg)
+        symbol_table.pop_scope();
+
+        if let Some(inner_reg) = final_expr_reg {
+            let result_reg = symbol_table.register_intermediate();
+                bytecode.push(Instruction::Mov(result_reg, inner_reg));
+                (bytecode, result_reg)
+            } 
+            else {
+                (bytecode, 0) // no value produced, caller shouldn't use this
+        }
     }
 
     fn compile_conditional (&mut self, condition: &Expression, then_branch: &Expression, else_branch: &Option<Box<Node<Expression>>>, symbol_table: &mut SymbolTable) 
@@ -292,6 +331,7 @@ impl Compiler {
     fn compile_function_call (&mut self, callee: &Expression, arguments: &Vec<Node<Expression>>, symbol_table: &mut SymbolTable) 
     -> (Vec<Instruction>, usize) {
         let mut bytecode = Vec::new();
+
         for (i, arg) in arguments.iter().enumerate() {
             let (mut arg_code, arg_reg) = self.compile_expression(&arg.kind, symbol_table);
             bytecode.append(&mut arg_code);
@@ -303,6 +343,10 @@ impl Compiler {
 
         bytecode.push(Instruction::Call(callee_reg));
 
-        (bytecode, 0)
+        // Evacuate return value out of reg 0 before anything can clobber it
+    let result_reg = symbol_table.register_intermediate();
+    bytecode.push(Instruction::Mov(result_reg, 0));
+
+        (bytecode, result_reg)
     }
 }

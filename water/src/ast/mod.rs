@@ -37,12 +37,9 @@ pub struct Module {
 pub enum Statement {
     Expression(ExprNode),
     //Import(Import),
-    Return(Return),
+    Return(Option<Node<Expression>>),
     //ForLoop(ForLoop),
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Return {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {

@@ -30,16 +30,18 @@ pub fn run_program(program_path: &str) {
     */
     let lexer::LexingArtifacts { tokens, errors } = lexer::tokenize(&code);
 
+    /* 
     for t in &tokens {
         println!("{:?}", t);
     }
+    */
 
-    for _error in &errors {
+    for (error, span) in &errors {
         diagnostics.push(
             Diagnostic {
                 severity: Severity::Error,
                 message: "lexing error".into(),
-                labels: vec![],
+                labels: vec![Label{ span: span.clone(), message: None}]
             }
         );
     }

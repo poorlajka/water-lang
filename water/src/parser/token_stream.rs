@@ -77,4 +77,17 @@ impl TokenStream {
 
         id
     }
+
+    pub fn expect_statement_end(&mut self) -> Result<(), ParsingError> {
+    match self.peek() {
+        None | Some((Token::Newline, _)) | Some((Token::Dedent, _)) | Some((Token::Eof, _)) => {
+            self.skip_newlines();
+            Ok(())
+        }
+        Some((_, span)) => Err(ParsingError::new(
+            "Expected newline or end of file after statement.",
+            Some(span),
+        )),
+    }
+}
 }

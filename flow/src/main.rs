@@ -1,5 +1,5 @@
 use water;
 
 fn main() {
-    water::run_program("examples/example.py");
+    water::run_program("examples/example.txt");
 }
