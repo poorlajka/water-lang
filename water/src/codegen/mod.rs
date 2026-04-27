@@ -176,7 +176,7 @@ impl Compiler {
             }
             Expression::Integer(value) => {
                 let reg = symbol_table.register_intermediate();
-                (vec![Instruction::MovConst(reg, *value)], reg) 
+                (vec![Instruction::MovConst(reg, *value as u64)], reg) 
             }
             Expression::Block { statements, final_expr } => {
                 self.compile_block(&statements, final_expr, symbol_table)

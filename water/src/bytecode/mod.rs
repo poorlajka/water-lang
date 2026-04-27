@@ -2,7 +2,7 @@
 
 #[derive(Debug)]
 pub enum Instruction {
-    MovConst(usize, i64),
+    MovConst(usize, u64),
     Mov(usize, usize),
     Print(usize),
     Halt,
