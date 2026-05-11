@@ -1,5 +1,6 @@
 use crate::ast::{Expression, Node, Pattern, FunctionSignature, Module, Statement, BinaryOp, UnaryOp};
-use crate::bytecode::{self, Instruction};
+use crate::bytecode::{self, Instruction, CompiledFunction, Program};
+use crate::bytecode::value::{tag_int, untag_int, is_int, tag_pointer, untag_pointer, is_pointer, Value};
 
 use std::collections::HashMap;
 use std::env::VarsOs;
@@ -7,10 +8,7 @@ use std::env::VarsOs;
 pub struct Compiler {
     pub main: Vec<Instruction>,
     pub functions: Vec<CompiledFunction>,
-}
-
-pub struct CompiledFunction {
-    pub code_block: Vec<Instruction>,
+    pub strings: Vec<String>,
 }
 
 struct SymbolTable {
@@ -58,12 +56,13 @@ impl SymbolTable {
     
 }
 
-pub fn compile_module (module: &Module) -> Compiler {
+pub fn compile_module (module: &Module) -> Program {
     let mut symbol_table = SymbolTable::new();
     symbol_table.push_scope();
     let mut compiler = Compiler {
         main: Vec::new(),
         functions: vec![CompiledFunction{code_block: Vec::new()}],
+        strings: Vec::new(),
     };
 
     for statement in &module.statements {
@@ -71,7 +70,11 @@ pub fn compile_module (module: &Module) -> Compiler {
         compiler.main.append(&mut compiled_statement);
     }
 
-    compiler
+    Program {
+        main: compiler.main,
+        functions: compiler.functions,
+        strings: compiler.strings,
+    }
 }
 
 impl Compiler {
@@ -87,7 +90,7 @@ impl Compiler {
             match &arg.kind {
                 Pattern::Identifier(ident) => {
                     let reg = symbol_table.register_variable(ident);
-                    bytecode.push(Instruction::Mov(reg, i+1))
+                    bytecode.push(Instruction::mov(reg, i+1))
                 }
                 _ => {
 
@@ -97,12 +100,12 @@ impl Compiler {
 
         let (mut body_code, result_reg) = self.compile_expression(body, symbol_table);
         bytecode.append(&mut body_code);
-        bytecode.push(Instruction::Mov(0, result_reg));
+        bytecode.push(Instruction::mov(0, result_reg));
         self.functions.push(CompiledFunction { code_block: bytecode });
 
         symbol_table.pop_scope();
         let reg = symbol_table.register_intermediate();
-        (vec![Instruction::MovConst(reg, function_index as i64)], reg)
+        (vec![Instruction::mov_const(reg, function_index as u64)], reg)
     }
 
     fn compile_statement (&mut self, statement: &Statement, symbol_table: &mut SymbolTable) 
@@ -121,13 +124,13 @@ impl Compiler {
                     Some(expr) => {
                         let (mut expr_code, expr_reg) = self.compile_expression(&expr.kind, symbol_table);
                         bytecode.append(&mut expr_code);
-                        bytecode.push(Instruction::Mov(0, expr_reg));
+                        bytecode.push(Instruction::mov(0, expr_reg));
                     }
                     None => {
 
                     }
                 }
-                bytecode.push(Instruction::Return);
+                bytecode.push(Instruction::return_());
             },
         }
 
@@ -150,7 +153,7 @@ impl Compiler {
         let (mut expr, rhs_reg) = self.compile_expression(&rhs, symbol_table);
         bytecode.append(&mut expr);
         bytecode.push(
-            Instruction::Mov(
+            Instruction::mov(
                 lhs_reg,
                 rhs_reg,
             ));
@@ -166,7 +169,7 @@ impl Compiler {
                 match name.as_str() {
                     "print" => {
                         let reg = symbol_table.register_intermediate();
-                        (vec![Instruction::MovConst(reg, 0)], reg)
+                        (vec![Instruction::mov_const(reg, 0)], reg)
                     }
                     _ => {
                         let reg = symbol_table.get_variable(name);
@@ -176,7 +179,7 @@ impl Compiler {
             }
             Expression::Integer(value) => {
                 let reg = symbol_table.register_intermediate();
-                (vec![Instruction::MovConst(reg, *value as u64)], reg) 
+                (vec![Instruction::mov_const(reg, tag_int(*value))], reg)
             }
             Expression::Block { statements, final_expr } => {
                 self.compile_block(&statements, final_expr, symbol_table)
@@ -204,6 +207,46 @@ impl Compiler {
             Expression::FunctionCall { callee, arguments } => {
                 self.compile_function_call(&callee.kind, arguments, symbol_table)
             }
+            Expression::String(s) => {
+                let string_index = self.strings.len();
+                self.strings.push(s.clone());
+                let reg = symbol_table.register_intermediate();
+                (vec![Instruction::load_string(reg, string_index)], reg)
+            }
+            Expression::Array(elements) => {
+                let mut bytecode = Vec::new();
+                let size = elements.len();
+
+                // Allocate the array
+                let arr_reg = symbol_table.register_intermediate();
+                bytecode.push(Instruction::create_array(arr_reg, size));
+
+                // Compile and store each element
+                for (i, element) in elements.iter().enumerate() {
+                    let (mut elem_code, elem_reg) = self.compile_expression(&element.kind, symbol_table);
+                    bytecode.append(&mut elem_code);
+
+                    // index is a compile time constant so we need a register for it
+                    let idx_reg = symbol_table.register_intermediate();
+                    bytecode.push(Instruction::mov_const(idx_reg, tag_int(i as i64)));
+                    bytecode.push(Instruction::store_index(arr_reg, idx_reg, elem_reg));
+                }
+
+                (bytecode, arr_reg)
+            }
+            Expression::Index { target, index } => {
+                let (mut target_code, target_reg) = self.compile_expression(&target.kind, symbol_table);
+                let (mut index_code, index_reg) = self.compile_expression(&index.kind, symbol_table);
+                
+                let dst_reg = symbol_table.register_intermediate();
+                
+                let mut bytecode = Vec::new();
+                bytecode.append(&mut target_code);
+                bytecode.append(&mut index_code);
+                bytecode.push(Instruction::load_index(dst_reg, target_reg, index_reg));
+                
+                (bytecode, dst_reg)
+            }
             _ => {
                 (Vec::new(), 0)
             }
@@ -221,43 +264,20 @@ impl Compiler {
         bytecode.append(&mut rhs_code);
 
         let res_reg = symbol_table.register_intermediate();
+
         bytecode.push(match op {
-            BinaryOp::Add => {
-                Instruction::Add(res_reg, lhs_reg, rhs_reg)
-            }
-            BinaryOp::Sub => {
-                Instruction::Sub(res_reg, lhs_reg, rhs_reg)
-            }
-            BinaryOp::Mul => {
-                Instruction::Mul(res_reg, lhs_reg, rhs_reg)
-            }
-            BinaryOp::Div => {
-                Instruction::Div(res_reg, lhs_reg, rhs_reg)
-            }
-            BinaryOp::Mod => {
-                Instruction::Mod(res_reg, lhs_reg, rhs_reg)
-            }
-            BinaryOp::LEq => {
-                Instruction::LEq(res_reg, lhs_reg, rhs_reg)
-            }
-            BinaryOp::Lt => {
-                Instruction::LT(res_reg, lhs_reg, rhs_reg)
-            }
-            BinaryOp::GEq => {
-                Instruction::GEq(res_reg, lhs_reg, rhs_reg)
-            }
-            BinaryOp::Gt => {
-                Instruction::GT(res_reg, lhs_reg, rhs_reg)
-            }
-            BinaryOp::Eq => {
-                Instruction::Eq(res_reg, lhs_reg, rhs_reg)
-            }
-            BinaryOp::NEq => {
-                Instruction::NEq(res_reg, lhs_reg, rhs_reg)
-            }
-            _ => {
-                Instruction::Add(res_reg, lhs_reg, rhs_reg)
-            }
+            BinaryOp::Add => Instruction::add(res_reg, lhs_reg, rhs_reg),
+            BinaryOp::Sub => Instruction::sub(res_reg, lhs_reg, rhs_reg),
+            BinaryOp::Mul => Instruction::mul(res_reg, lhs_reg, rhs_reg),
+            BinaryOp::Div => Instruction::div(res_reg, lhs_reg, rhs_reg),
+            BinaryOp::Mod => Instruction::mod_(res_reg, lhs_reg, rhs_reg),
+            BinaryOp::LEq => Instruction::leq(res_reg, lhs_reg, rhs_reg),
+            BinaryOp::Lt  => Instruction::lt(res_reg, lhs_reg, rhs_reg),
+            BinaryOp::GEq => Instruction::geq(res_reg, lhs_reg, rhs_reg),
+            BinaryOp::Gt  => Instruction::gt(res_reg, lhs_reg, rhs_reg),
+            BinaryOp::Eq  => Instruction::eq(res_reg, lhs_reg, rhs_reg),
+            BinaryOp::NEq => Instruction::neq(res_reg, lhs_reg, rhs_reg),
+            _ => Instruction::add(res_reg, lhs_reg, rhs_reg),
         });
 
         (bytecode, res_reg)
@@ -288,7 +308,7 @@ impl Compiler {
 
         if let Some(inner_reg) = final_expr_reg {
             let result_reg = symbol_table.register_intermediate();
-                bytecode.push(Instruction::Mov(result_reg, inner_reg));
+                bytecode.push(Instruction::mov(result_reg, inner_reg));
                 (bytecode, result_reg)
             } 
             else {
@@ -307,20 +327,20 @@ impl Compiler {
         let final_reg = symbol_table.register_intermediate();
 
         if let Some(els) = else_branch {
-            let jump = Instruction::JmpCond(then_code.len()+2, cond_reg);
+            let jump = Instruction::jmp_cond(then_code.len()+2, cond_reg);
             bytecode.push(jump);
             bytecode.append(&mut then_code);
-            bytecode.push(Instruction::Mov(final_reg, then_reg));
+            bytecode.push(Instruction::mov(final_reg, then_reg));
 
             let (mut els_code, els_reg) = self.compile_expression(&els.kind, symbol_table);
 
-            let jump = Instruction::Jmp(els_code.len()+1);
+            let jump = Instruction::jmp(els_code.len()+1);
             bytecode.push(jump);
             bytecode.append(&mut els_code);
-            bytecode.push(Instruction::Mov(final_reg, els_reg));
+            bytecode.push(Instruction::mov(final_reg, els_reg));
         }
         else {
-            let jump = Instruction::JmpCond(then_code.len(), cond_reg);
+            let jump = Instruction::jmp_cond(then_code.len(), cond_reg);
             bytecode.push(jump);
             bytecode.append(&mut then_code);
         };
@@ -335,17 +355,17 @@ impl Compiler {
         for (i, arg) in arguments.iter().enumerate() {
             let (mut arg_code, arg_reg) = self.compile_expression(&arg.kind, symbol_table);
             bytecode.append(&mut arg_code);
-            bytecode.push(Instruction::Mov(i+1, arg_reg));
+            bytecode.push(Instruction::mov(i+1, arg_reg));
         }
 
         let (mut callee_code, callee_reg) = self.compile_expression(callee, symbol_table);
         bytecode.append(&mut callee_code);
 
-        bytecode.push(Instruction::Call(callee_reg));
+        bytecode.push(Instruction::call(callee_reg));
 
         // Evacuate return value out of reg 0 before anything can clobber it
     let result_reg = symbol_table.register_intermediate();
-    bytecode.push(Instruction::Mov(result_reg, 0));
+    bytecode.push(Instruction::mov(result_reg, 0));
 
         (bytecode, result_reg)
     }

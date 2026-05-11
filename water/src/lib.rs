@@ -8,7 +8,7 @@ pub mod vm;
 
 use std::fs;
 
-use crate::diagnostics::{Diagnostic, Severity, Label, emitter};
+use crate::{diagnostics::{Diagnostic, Label, Severity, emitter}};
 
 pub fn run_program(program_path: &str) {
 
@@ -76,10 +76,10 @@ pub fn run_program(program_path: &str) {
             Compile AST to bytecode
 
     */
-    let bytecode = codegen::compile_module(&ast);
+    let program = codegen::compile_module(&ast);
 
     /*
         Execute bytecode
     */
-    vm::exec(&bytecode.main, &bytecode.functions);
+    vm::exec(&program);
 }

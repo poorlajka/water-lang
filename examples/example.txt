@@ -1,7 +1,8 @@
-fib = (n: int) => int
-    if n < 2
-        n
-    else 
-        fib(n - 1) + fib(n - 2)
 
-print(fib(10))
+my_var = 5
+
+my_func = (a, b) => 
+    c = a + b + 5
+    a + b + c
+
+print(my_func(1, 2))
