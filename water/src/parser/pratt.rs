@@ -113,6 +113,7 @@ fn parse_prefix(
             parse_array(token_stream, start_span)
         }
         Some((Token::If, _span)) => parse_conditional(token_stream),
+        Some((Token::While, _span)) => parse_while(token_stream),
         Some((Token::LParen, start_span)) => {
             /*
                 Paren could mean either a grouping, a tuple, or a function
@@ -388,6 +389,22 @@ fn parse_conditional(
             condition: Box::new(condition),
             then_branch: Box::new(then_branch),
             else_branch,
+        },
+    ))
+}
+
+fn parse_while(
+    token_stream: &mut TokenStream,
+) -> Result<Node<Expression>, ParsingError> {
+    let condition = parse_expression(token_stream, 0)?;
+    let body = parse_block(token_stream)?;
+    let span = span_from_to_node(&condition, &body);
+    Ok(create_node(
+        token_stream,
+        span,
+        Expression::While {
+            condition: Box::new(condition),
+            body: Box::new(body),
         },
     ))
 }

@@ -1,8 +1,7 @@
 
-my_var = 5
-
-my_func = (a, b) => 
-    c = a + b + 5
-    a + b + c
-
-print(my_func(1, 2))
+i = 0
+while i < 5
+    print(i)
+    i = i + 1
+    if i == 2
+        break

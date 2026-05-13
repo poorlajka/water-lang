@@ -146,6 +146,13 @@ fn print_expression(expr: &Expression, prefix: &str, is_last: bool) {
 
             print_expression(&body.kind, &new_prefix, is_last);
         }
+        Expression::While { condition, body } => {
+            println!("While");
+            let new_prefix =
+                format!("{prefix}{}", if is_last { "    " } else { "│   " });
+            print_expression(&condition.kind, &new_prefix, false);
+            print_expression(&body.kind, &new_prefix, true);
+        }
         Expression::Unary { .. } => {}
         _ => {}
     }

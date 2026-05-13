@@ -201,13 +201,13 @@ impl Interpreter {
     }
 
     fn handle_jmp(&mut self, instr: Instruction, _program: &Program) {
-        self.ip += instr.op0 as usize + 1;
+        self.ip = (self.ip as i64 + instr.op0 as i64 + 1) as usize;
     }
 
     fn handle_jmp_cond(&mut self, instr: Instruction, _program: &Program) {
         let cond = untag_bool(self.vm.gp_registers[instr.op1 as usize]);
         if !cond {
-            self.ip += instr.op0 as usize + 1;
+            self.ip = (self.ip as i64 + instr.op0 as i64 + 1) as usize;
         } else {
             self.ip += 1;
         }

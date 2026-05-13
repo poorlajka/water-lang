@@ -1,5 +1,5 @@
 use crate::ast::{Expression, Node, Pattern, FunctionSignature, Module, Statement, BinaryOp, UnaryOp};
-use crate::bytecode::{self, Instruction, CompiledFunction, Program};
+use crate::bytecode::{self, Instruction, CompiledFunction, Program, Opcode};
 use crate::bytecode::value::{tag_int, untag_int, is_int, tag_pointer, untag_pointer, is_pointer, Value};
 
 use std::collections::HashMap;
@@ -119,18 +119,18 @@ impl Compiler {
                 bytecode.append(&mut expr);
             },
             Statement::Return(expr) => {
-
                 match expr {
                     Some(expr) => {
                         let (mut expr_code, expr_reg) = self.compile_expression(&expr.kind, symbol_table);
                         bytecode.append(&mut expr_code);
                         bytecode.push(Instruction::mov(0, expr_reg));
                     }
-                    None => {
-
-                    }
+                    None => {}
                 }
                 bytecode.push(Instruction::return_());
+            },
+            Statement::Break => {
+                bytecode.push(Instruction::jmp(usize::MAX));
             },
         }
 
@@ -142,13 +142,15 @@ impl Compiler {
     -> (Vec<Instruction>, usize) {
         let mut bytecode = Vec::new();
 
-        let lhs_reg = match &lhs{
+        let lhs_reg = match &lhs {
             Pattern::Identifier(ident) => {
-                symbol_table.register_variable(ident)
+                if let Some(reg) = symbol_table.get_variable(ident) {
+                    reg
+                } else {
+                    symbol_table.register_variable(ident)
+                }
             }
-            _ => {
-                99
-            }
+            _ => 99,
         };
         let (mut expr, rhs_reg) = self.compile_expression(&rhs, symbol_table);
         bytecode.append(&mut expr);
@@ -161,7 +163,7 @@ impl Compiler {
         (bytecode, rhs_reg)
     }
 
-    fn compile_expression (&mut self, expression: &Expression, symbol_table: &mut SymbolTable) 
+    fn compile_expression (&mut self, expression: &Expression, symbol_table: &mut SymbolTable)
     -> (Vec<Instruction>, usize) {
 
         match expression {
@@ -173,7 +175,7 @@ impl Compiler {
                     }
                     _ => {
                         let reg = symbol_table.get_variable(name);
-                        (Vec::new(), reg.expect(&format!("variable {} was not found fix this later", name))) 
+                        (Vec::new(), reg.expect(&format!("variable {} was not found fix this later", name)))
                     }
                 }
             }
@@ -192,11 +194,14 @@ impl Compiler {
             },
             Expression::Conditional { condition, then_branch, else_branch } => {
                 self.compile_conditional(
-                    &condition.kind, 
-                    &then_branch.kind, 
+                    &condition.kind,
+                    &then_branch.kind,
                     &else_branch,
                     symbol_table,
                 )
+            },
+            Expression::While { condition, body } => {
+                self.compile_while(&condition.kind, &body.kind, symbol_table)
             },
             Expression::Unary { op, expression } => {
                 (Vec::new(), 0)
@@ -217,16 +222,13 @@ impl Compiler {
                 let mut bytecode = Vec::new();
                 let size = elements.len();
 
-                // Allocate the array
                 let arr_reg = symbol_table.register_intermediate();
                 bytecode.push(Instruction::create_array(arr_reg, size));
 
-                // Compile and store each element
                 for (i, element) in elements.iter().enumerate() {
                     let (mut elem_code, elem_reg) = self.compile_expression(&element.kind, symbol_table);
                     bytecode.append(&mut elem_code);
 
-                    // index is a compile time constant so we need a register for it
                     let idx_reg = symbol_table.register_intermediate();
                     bytecode.push(Instruction::mov_const(idx_reg, tag_int(i as i64)));
                     bytecode.push(Instruction::store_index(arr_reg, idx_reg, elem_reg));
@@ -237,14 +239,14 @@ impl Compiler {
             Expression::Index { target, index } => {
                 let (mut target_code, target_reg) = self.compile_expression(&target.kind, symbol_table);
                 let (mut index_code, index_reg) = self.compile_expression(&index.kind, symbol_table);
-                
+
                 let dst_reg = symbol_table.register_intermediate();
-                
+
                 let mut bytecode = Vec::new();
                 bytecode.append(&mut target_code);
                 bytecode.append(&mut index_code);
                 bytecode.push(Instruction::load_index(dst_reg, target_reg, index_reg));
-                
+
                 (bytecode, dst_reg)
             }
             _ => {
@@ -348,7 +350,34 @@ impl Compiler {
         (bytecode, final_reg)
     }
 
-    fn compile_function_call (&mut self, callee: &Expression, arguments: &Vec<Node<Expression>>, symbol_table: &mut SymbolTable) 
+    fn compile_while (&mut self, condition: &Expression, body: &Expression, symbol_table: &mut SymbolTable)
+    -> (Vec<Instruction>, usize) {
+        let (mut cond_code, cond_reg) = self.compile_expression(condition, symbol_table);
+        let (mut body_code, _) = self.compile_expression(body, symbol_table);
+
+        let clen = cond_code.len();
+        let blen = body_code.len();
+
+        // patch break sentinels: break at body position i jumps past the backward jump
+        for (i, instr) in body_code.iter_mut().enumerate() {
+            if matches!(instr.opcode, Opcode::Jmp) && instr.op0 == usize::MAX as u64 {
+                instr.op0 = (blen as i64 - i as i64) as u64;
+            }
+        }
+
+        let exit_offset = blen + 1;
+        let back_offset = (-(clen as i64 + blen as i64 + 2)) as u64;
+
+        let mut bytecode = Vec::new();
+        bytecode.append(&mut cond_code);
+        bytecode.push(Instruction::jmp_cond(exit_offset, cond_reg));
+        bytecode.append(&mut body_code);
+        bytecode.push(Instruction::jmp(back_offset as usize));
+
+        (bytecode, 0)
+    }
+
+    fn compile_function_call (&mut self, callee: &Expression, arguments: &Vec<Node<Expression>>, symbol_table: &mut SymbolTable)
     -> (Vec<Instruction>, usize) {
         let mut bytecode = Vec::new();
 

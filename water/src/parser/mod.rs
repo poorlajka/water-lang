@@ -74,6 +74,12 @@ fn parse_statement(
         return Ok(Statement::Return(value));
     }
 
+    if let Some((Token::Break, _)) = token_stream.peek() {
+        token_stream.next();
+        token_stream.expect_statement_end()?;
+        return Ok(Statement::Break);
+    }
+
     match pratt::parse_expression(token_stream, 0) {
         Ok(expression) => {
             token_stream.expect_statement_end()?;

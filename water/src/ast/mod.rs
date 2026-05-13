@@ -38,6 +38,7 @@ pub enum Statement {
     Expression(ExprNode),
     //Import(Import),
     Return(Option<Node<Expression>>),
+    Break,
     //ForLoop(ForLoop),
 }
 
@@ -75,6 +76,11 @@ pub enum Expression {
         condition: Box<ExprNode>,
         then_branch: Box<ExprNode>,
         else_branch: Option<Box<ExprNode>>,
+    },
+
+    While {
+        condition: Box<ExprNode>,
+        body: Box<ExprNode>,
     },
 
     Block {
