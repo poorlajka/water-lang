@@ -6,15 +6,15 @@ pub const TAG_POINTER: Value = 0b000;
 pub const TAG_BOOL:    Value = 0b011;
 
 pub fn tag_int(n: i64) -> Value {
-    ((n << 1) as u64) | TAG_INT
+    ((n << 3) as u64) | TAG_INT
 }
 
 pub fn untag_int(val: Value) -> i64 {
-    (val as i64) >> 1
+    (val as i64) >> 3
 }
 
 pub fn is_int(val: Value) -> bool {
-    val & 1 == 1
+    val & TAG_MASK == TAG_INT
 }
 
 pub fn tag_pointer(ptr: usize) -> Value {

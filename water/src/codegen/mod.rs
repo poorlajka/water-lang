@@ -5,6 +5,9 @@ use crate::bytecode::value::{tag_int, untag_int, is_int, tag_pointer, untag_poin
 use std::collections::HashMap;
 use std::env::VarsOs;
 
+const BREAK_SENTINEL: usize = usize::MAX;
+const CONTINUE_SENTINEL: usize = usize::MAX - 1;
+
 pub struct Compiler {
     pub main: Vec<Instruction>,
     pub functions: Vec<CompiledFunction>,
@@ -130,7 +133,10 @@ impl Compiler {
                 bytecode.push(Instruction::return_());
             },
             Statement::Break => {
-                bytecode.push(Instruction::jmp(usize::MAX));
+                bytecode.push(Instruction::jmp(BREAK_SENTINEL));
+            },
+            Statement::Continue => {
+                bytecode.push(Instruction::jmp(CONTINUE_SENTINEL));
             },
         }
 
@@ -358,10 +364,13 @@ impl Compiler {
         let clen = cond_code.len();
         let blen = body_code.len();
 
-        // patch break sentinels: break at body position i jumps past the backward jump
+        // patch break/continue sentinels
         for (i, instr) in body_code.iter_mut().enumerate() {
-            if matches!(instr.opcode, Opcode::Jmp) && instr.op0 == usize::MAX as u64 {
+            if !matches!(instr.opcode, Opcode::Jmp) { continue; }
+            if instr.op0 == BREAK_SENTINEL as u64 {
                 instr.op0 = (blen as i64 - i as i64) as u64;
+            } else if instr.op0 == CONTINUE_SENTINEL as u64 {
+                instr.op0 = (-(clen as i64 + i as i64 + 2)) as u64;
             }
         }
 

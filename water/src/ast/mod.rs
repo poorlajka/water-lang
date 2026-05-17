@@ -39,6 +39,7 @@ pub enum Statement {
     //Import(Import),
     Return(Option<Node<Expression>>),
     Break,
+    Continue,
     //ForLoop(ForLoop),
 }
 

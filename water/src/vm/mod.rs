@@ -2,9 +2,14 @@ pub mod heap;
 use crate::bytecode::{Instruction, CompiledFunction, Opcode, Program};
 use crate::bytecode::value::{tag_int, untag_int, is_int, is_bool, untag_bool, tag_bool, tag_pointer, untag_pointer, is_pointer, Value};
 use heap::{Heap, ObjectKind};
+use std::io::{self, Write};
 
 pub fn exec(program: &Program) {
-    let mut interpreter = Interpreter::new();
+    exec_with(program, Box::new(io::stdout()));
+}
+
+pub fn exec_with(program: &Program, output: Box<dyn Write>) {
+    let mut interpreter = Interpreter::new(output);
     interpreter.run(program);
 }
 
@@ -15,6 +20,7 @@ struct VM {
     pub fp_registers: [f64; NR_OF_REGISTERS],
     pub call_stack: Vec<CallFrame>,
     pub heap: Heap,
+    pub output: Box<dyn Write>,
 }
 
 struct CallFrame {
@@ -24,16 +30,17 @@ struct CallFrame {
 }
 
 impl VM {
-    fn new() -> Self {
+    fn new(output: Box<dyn Write>) -> Self {
         Self {
             gp_registers: [0; NR_OF_REGISTERS],
             fp_registers: [0.0; NR_OF_REGISTERS],
             call_stack: Vec::new(),
             heap: Heap::new(1024 * 1024),
+            output,
         }
     }
 }
-pub struct Interpreter {
+struct Interpreter {
     pub vm: VM,
     ip: usize,
     current_function: usize,
@@ -67,9 +74,9 @@ const DISPATCH_TABLE: [Handler; Opcode::COUNT as usize] = [
 ];
 
 impl Interpreter {
-    pub fn new() -> Self {
+    pub fn new(output: Box<dyn Write>) -> Self {
         Self {
-            vm: VM::new(),
+            vm: VM::new(output),
             ip: 0,
             current_function: 0,
         }
@@ -218,10 +225,10 @@ impl Interpreter {
         match index {
             0 => {
                 let val = self.vm.gp_registers[1];
-                if is_int(val) {
-                    println!("{}", untag_int(val));
-                } else if is_bool(val) {
-                    println!("{}", untag_bool(val));
+                if is_bool(val) {
+                    writeln!(self.vm.output, "{}", untag_bool(val)).ok();
+                } else if is_int(val) {
+                    writeln!(self.vm.output, "{}", untag_int(val)).ok();
                 } else if is_pointer(val) {
                     let ptr = untag_pointer(val);
                     let kind = self.vm.heap.get_kind(ptr);
@@ -231,9 +238,9 @@ impl Interpreter {
                             let data_ptr = self.vm.heap.data_ptr(ptr);
                             let bytes = self.vm.heap.read_bytes(data_ptr, size);
                             let s = std::str::from_utf8(bytes).expect("invalid utf8");
-                            println!("{}", s);
+                            writeln!(self.vm.output, "{}", s).ok();
                         }
-                        _ => println!("<object at {:x}>", val),
+                        _ => { writeln!(self.vm.output, "<object at {:x}>", val).ok(); }
                     }
                 }
 
