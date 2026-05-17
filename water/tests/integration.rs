@@ -57,6 +57,33 @@ fn variable_reassignment() {
     assert_eq!(run_capturing("x = 1\nx = 2\nprint(x)"), "2\n");
 }
 
+// -- compound assignment --
+
+#[test]
+fn plus_eq() {
+    assert_eq!(run_capturing("x = 10\nx += 5\nprint(x)"), "15\n");
+}
+
+#[test]
+fn minus_eq() {
+    assert_eq!(run_capturing("x = 10\nx -= 3\nprint(x)"), "7\n");
+}
+
+#[test]
+fn star_eq() {
+    assert_eq!(run_capturing("x = 4\nx *= 3\nprint(x)"), "12\n");
+}
+
+#[test]
+fn slash_eq() {
+    assert_eq!(run_capturing("x = 12\nx /= 4\nprint(x)"), "3\n");
+}
+
+#[test]
+fn percent_eq() {
+    assert_eq!(run_capturing("x = 7\nx %= 3\nprint(x)"), "1\n");
+}
+
 // -- strings --
 
 #[test]
@@ -160,6 +187,99 @@ fn continue_skips_iteration() {
                 continue
             print(i)
     "}), "1\n3\n4\n");
+}
+
+// -- booleans --
+
+#[test]
+fn bool_literal_true() {
+    assert_eq!(run_capturing("print(true)"), "true\n");
+}
+
+#[test]
+fn bool_literal_false() {
+    assert_eq!(run_capturing("print(false)"), "false\n");
+}
+
+// -- logical not --
+
+#[test]
+fn not_true() {
+    assert_eq!(run_capturing("print(!true)"), "false\n");
+}
+
+#[test]
+fn not_false() {
+    assert_eq!(run_capturing("print(!false)"), "true\n");
+}
+
+#[test]
+fn not_keyword() {
+    assert_eq!(run_capturing("print(not true)"), "false\n");
+}
+
+// -- unary negation --
+
+#[test]
+fn unary_negation() {
+    assert_eq!(run_capturing("print(-5)"), "-5\n");
+}
+
+#[test]
+fn unary_negation_variable() {
+    assert_eq!(run_capturing("x = 3\nprint(-x)"), "-3\n");
+}
+
+// -- logical and --
+
+#[test]
+fn and_true_true() {
+    assert_eq!(run_capturing("print(true and true)"), "true\n");
+}
+
+#[test]
+fn and_true_false() {
+    assert_eq!(run_capturing("print(true and false)"), "false\n");
+}
+
+#[test]
+fn and_false_true() {
+    assert_eq!(run_capturing("print(false and true)"), "false\n");
+}
+
+#[test]
+fn and_short_circuits() {
+    assert_eq!(run_capturing(indoc! {"
+        x = 0
+        false and (x = 1)
+        print(x)
+    "}), "0\n");
+}
+
+// -- logical or --
+
+#[test]
+fn or_false_false() {
+    assert_eq!(run_capturing("print(false or false)"), "false\n");
+}
+
+#[test]
+fn or_false_true() {
+    assert_eq!(run_capturing("print(false or true)"), "true\n");
+}
+
+#[test]
+fn or_true_false() {
+    assert_eq!(run_capturing("print(true or false)"), "true\n");
+}
+
+#[test]
+fn or_short_circuits() {
+    assert_eq!(run_capturing(indoc! {"
+        x = 0
+        true or (x = 1)
+        print(x)
+    "}), "0\n");
 }
 
 // -- arrays --

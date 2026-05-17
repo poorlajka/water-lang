@@ -62,6 +62,17 @@ pub fn parse_expression(
     Ok(lhs)
 }
 
+fn compound_assign_op(tok: &Token) -> Option<BinaryOp> {
+    match tok {
+        Token::PlusEq    => Some(BinaryOp::Add),
+        Token::MinusEq   => Some(BinaryOp::Sub),
+        Token::StarEq    => Some(BinaryOp::Mul),
+        Token::SlashEq   => Some(BinaryOp::Div),
+        Token::PercentEq => Some(BinaryOp::Mod),
+        _ => None,
+    }
+}
+
 fn infix_binding_power(tok: &Token) -> Option<(u8, u8, BinaryOp)> {
     match tok {
         Token::Plus => Some((10, 11, BinaryOp::Add)),
@@ -96,6 +107,12 @@ fn parse_prefix(
         }
         Some((Token::Bang, op_span)) => {
             parse_prefix_unary(token_stream, op_span, UnaryOp::Not)
+        }
+        Some((Token::True, span)) => {
+            Ok(create_node(token_stream, span, Expression::Bool(true)))
+        }
+        Some((Token::False, span)) => {
+            Ok(create_node(token_stream, span, Expression::Bool(false)))
         }
         Some((Token::Integer(i), span)) => {
             Ok(create_node(token_stream, span, Expression::Integer(i)))
@@ -255,6 +272,36 @@ fn parse_infix(
     lhs: &Node<Expression>,
     min_bp: u8,
 ) -> Result<Option<Node<Expression>>, ParsingError> {
+    // Compound assignment: x += e  →  x = x + e
+    if let Some((tok, _)) = token_stream.peek() {
+        if let Some(base_op) = compound_assign_op(&tok) {
+            if 1 < min_bp {
+                return Ok(None);
+            }
+            token_stream.next();
+            let rhs = parse_expression(token_stream, 0)?;
+            let span = span_from_to_node(lhs, &rhs);
+            let binary = create_node(
+                token_stream,
+                span.clone(),
+                Expression::Binary {
+                    lhs: Box::new(lhs.clone()),
+                    op: base_op,
+                    rhs: Box::new(rhs),
+                },
+            );
+            let pattern = lhs.clone().into_pattern()?;
+            return Ok(Some(create_node(
+                token_stream,
+                span,
+                Expression::Assignment {
+                    lhs: pattern,
+                    rhs: Box::new(binary),
+                },
+            )));
+        }
+    }
+
     let (left_bp, right_bp, bin_op) = match token_stream.peek() {
         Some((tok, _)) => match infix_binding_power(&tok) {
             Some(info) => info,

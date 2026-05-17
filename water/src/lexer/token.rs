@@ -129,8 +129,15 @@ pub enum Token {
     #[token("!=")]
     NotEq,
 
+    #[token("not")]
     #[token("!")]
     Bang,
+
+    #[token("true")]
+    True,
+
+    #[token("false")]
+    False,
 
     #[token("=>")]
     RArrow,
@@ -160,6 +167,17 @@ pub enum Token {
 
     #[token(",")]
     Comma,
+
+    #[token("+=")]
+    PlusEq,
+    #[token("-=")]
+    MinusEq,
+    #[token("*=")]
+    StarEq,
+    #[token("/=")]
+    SlashEq,
+    #[token("%=")]
+    PercentEq,
 
     #[token("+")]
     Plus,

@@ -25,6 +25,7 @@ pub enum Opcode {
     CreateArray = 19,
     LoadIndex = 20,
     StoreIndex = 21,
+    Not = 22,
     COUNT,
 }
 
@@ -127,6 +128,10 @@ impl Instruction {
 
     pub fn store_index(arr: usize, idx: usize, src: usize) -> Self {
         Self::new(Opcode::StoreIndex, arr as u64, idx as u64, src as u64)
+    }
+
+    pub fn not(dst: usize, src: usize) -> Self {
+        Self::new(Opcode::Not, dst as u64, src as u64, 0)
     }
 }
 

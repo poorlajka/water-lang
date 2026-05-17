@@ -1,6 +1,6 @@
 use crate::ast::{Expression, Node, Pattern, FunctionSignature, Module, Statement, BinaryOp, UnaryOp};
 use crate::bytecode::{self, Instruction, CompiledFunction, Program, Opcode};
-use crate::bytecode::value::{tag_int, untag_int, is_int, tag_pointer, untag_pointer, is_pointer, Value};
+use crate::bytecode::value::{tag_int, tag_bool, untag_int, is_int, tag_pointer, untag_pointer, is_pointer, Value};
 
 use std::collections::HashMap;
 use std::env::VarsOs;
@@ -189,6 +189,10 @@ impl Compiler {
                 let reg = symbol_table.register_intermediate();
                 (vec![Instruction::mov_const(reg, tag_int(*value))], reg)
             }
+            Expression::Bool(value) => {
+                let reg = symbol_table.register_intermediate();
+                (vec![Instruction::mov_const(reg, tag_bool(*value))], reg)
+            }
             Expression::Block { statements, final_expr } => {
                 self.compile_block(&statements, final_expr, symbol_table)
             },
@@ -210,7 +214,7 @@ impl Compiler {
                 self.compile_while(&condition.kind, &body.kind, symbol_table)
             },
             Expression::Unary { op, expression } => {
-                (Vec::new(), 0)
+                self.compile_unary(op, &expression.kind, symbol_table)
             },
             Expression::Binary { lhs, op, rhs } => {
                 self.compile_binary_expression(&lhs.kind, op, &rhs.kind, symbol_table)
@@ -261,8 +265,66 @@ impl Compiler {
         }
     }
 
-    fn compile_binary_expression (&mut self, lhs: &Expression, op: &BinaryOp, rhs: &Expression, symbol_table: &mut SymbolTable) 
+    fn compile_unary(&mut self, op: &UnaryOp, expr: &Expression, symbol_table: &mut SymbolTable)
     -> (Vec<Instruction>, usize) {
+        let (mut expr_code, expr_reg) = self.compile_expression(expr, symbol_table);
+        let res_reg = symbol_table.register_intermediate();
+        match op {
+            UnaryOp::Not => {
+                expr_code.push(Instruction::not(res_reg, expr_reg));
+                (expr_code, res_reg)
+            }
+            UnaryOp::Neg => {
+                let zero_reg = symbol_table.register_intermediate();
+                expr_code.push(Instruction::mov_const(zero_reg, tag_int(0)));
+                expr_code.push(Instruction::sub(res_reg, zero_reg, expr_reg));
+                (expr_code, res_reg)
+            }
+            UnaryOp::Plus => (expr_code, expr_reg),
+        }
+    }
+
+    fn compile_logical(&mut self, lhs: &Expression, op: &BinaryOp, rhs: &Expression, symbol_table: &mut SymbolTable)
+    -> (Vec<Instruction>, usize) {
+        let (mut a_code, a_reg) = self.compile_expression(lhs, symbol_table);
+        let (b_code, b_reg) = self.compile_expression(rhs, symbol_table);
+        let result_reg = symbol_table.register_intermediate();
+        let b_len = b_code.len();
+
+        let mut bytecode = Vec::new();
+        bytecode.append(&mut a_code);
+
+        match op {
+            BinaryOp::And => {
+                // if a is false, skip b and keep a (false) as result
+                bytecode.push(Instruction::jmp_cond(b_len + 2, a_reg));
+                bytecode.extend(b_code);
+                bytecode.push(Instruction::mov(result_reg, b_reg));
+                bytecode.push(Instruction::jmp(1));
+                bytecode.push(Instruction::mov(result_reg, a_reg));
+            }
+            BinaryOp::Or => {
+                let tmp_reg = symbol_table.register_intermediate();
+                // if a is true (!a is false), skip b and keep a (true) as result
+                bytecode.push(Instruction::not(tmp_reg, a_reg));
+                bytecode.push(Instruction::jmp_cond(b_len + 2, tmp_reg));
+                bytecode.extend(b_code);
+                bytecode.push(Instruction::mov(result_reg, b_reg));
+                bytecode.push(Instruction::jmp(1));
+                bytecode.push(Instruction::mov(result_reg, a_reg));
+            }
+            _ => unreachable!(),
+        }
+
+        (bytecode, result_reg)
+    }
+
+    fn compile_binary_expression (&mut self, lhs: &Expression, op: &BinaryOp, rhs: &Expression, symbol_table: &mut SymbolTable)
+    -> (Vec<Instruction>, usize) {
+        if matches!(op, BinaryOp::And | BinaryOp::Or) {
+            return self.compile_logical(lhs, op, rhs, symbol_table);
+        }
+
         let mut bytecode = Vec::new();
 
         let (mut lhs_code, lhs_reg) = self.compile_expression(&lhs, symbol_table);

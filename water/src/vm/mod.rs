@@ -71,6 +71,7 @@ const DISPATCH_TABLE: [Handler; Opcode::COUNT as usize] = [
     Interpreter::handle_create_array,
     Interpreter::handle_load_index,
     Interpreter::handle_store_index,
+    Interpreter::handle_not,
 ];
 
 impl Interpreter {
@@ -315,6 +316,12 @@ impl Interpreter {
         self.ip += 1;
     }
 
+    fn handle_not(&mut self, instr: Instruction, _program: &Program) {
+        let val = untag_bool(self.vm.gp_registers[instr.op1 as usize]);
+        self.vm.gp_registers[instr.op0 as usize] = tag_bool(!val);
+        self.ip += 1;
+    }
+
     fn handle_store_index(&mut self, instr: Instruction, _program: &Program) {
         let arr_ptr = untag_pointer(self.vm.gp_registers[instr.op0 as usize]);
         let idx = untag_int(self.vm.gp_registers[instr.op1 as usize]) as usize;
@@ -357,7 +364,8 @@ mod tests {
         assert_eq!(Opcode::CreateArray as usize, 19);
         assert_eq!(Opcode::LoadIndex as usize, 20);
         assert_eq!(Opcode::StoreIndex as usize, 21);
-        
+        assert_eq!(Opcode::Not as usize, 22);
+
         // Verify table length matches number of opcodes
         assert_eq!(DISPATCH_TABLE.len(), Opcode::COUNT as usize);
     }
