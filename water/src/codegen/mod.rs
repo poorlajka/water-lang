@@ -1,17 +1,42 @@
 use crate::ast::{Expression, Node, Pattern, FunctionSignature, Module, Statement, BinaryOp, UnaryOp};
-use crate::bytecode::{self, Instruction, CompiledFunction, Program, Opcode};
-use crate::bytecode::value::{tag_int, tag_bool, untag_int, is_int, tag_pointer, untag_pointer, is_pointer, Value};
+use crate::bytecode::{Instruction, CompiledFunction, Opcode};
+use crate::bytecode::value::{tag_int, tag_bool};
 
 use std::collections::HashMap;
-use std::env::VarsOs;
 
 const BREAK_SENTINEL: usize = usize::MAX;
 const CONTINUE_SENTINEL: usize = usize::MAX - 1;
 
-pub struct Compiler {
+pub struct CompiledModule {
     pub main: Vec<Instruction>,
     pub functions: Vec<CompiledFunction>,
     pub strings: Vec<String>,
+    pub exports: HashMap<String, usize>,       // name → local function index
+    pub imports: Vec<(String, String)>,        // ordered: (module_path, export_name)
+}
+
+struct Compiler {
+    main: Vec<Instruction>,
+    functions: Vec<CompiledFunction>,
+    strings: Vec<String>,
+    exports: HashMap<String, usize>,
+    imports: Vec<(String, String)>,
+    import_by_key: HashMap<String, usize>,     // "mod::name" → index in imports
+    import_index: HashMap<String, usize>,      // local_name → index in imports
+    module_ns: HashMap<String, String>,        // alias → module_path
+}
+
+impl Compiler {
+    fn get_or_add_import(&mut self, module_path: String, export_name: String) -> usize {
+        let key = format!("{}::{}", module_path, export_name);
+        if let Some(&idx) = self.import_by_key.get(&key) {
+            return idx;
+        }
+        let idx = self.imports.len();
+        self.imports.push((module_path, export_name));
+        self.import_by_key.insert(key, idx);
+        idx
+    }
 }
 
 struct SymbolTable {
@@ -33,71 +58,100 @@ impl SymbolTable {
             .0.insert(name.to_string(), self.reg_top);
 
         self.reg_top += 1;
-        self.reg_top - 1 
+        self.reg_top - 1
     }
 
     fn register_intermediate (&mut self) -> usize {
         self.reg_top += 1;
-        self.reg_top - 1 
+        self.reg_top - 1
     }
 
-    fn push_scope(&mut self) { 
-        self.scopes.push((HashMap::new(), self.reg_top)); 
+    fn push_scope(&mut self) {
+        self.scopes.push((HashMap::new(), self.reg_top));
     }
 
-    fn pop_scope(&mut self) { 
+    fn pop_scope(&mut self) {
         if let Some((_, watermark)) = self.scopes.pop() {
             self.reg_top = watermark;
         }
     }
 
     fn get_variable(&self, name: &str) -> Option<usize> {
-        // Walk scopes from innermost outward
         self.scopes.iter().rev()
             .find_map(|scope| scope.0.get(name).copied())
     }
-    
 }
 
-pub fn compile_module (module: &Module) -> Program {
+pub fn compile_module_from_ast(module: &Module) -> CompiledModule {
     let mut symbol_table = SymbolTable::new();
     symbol_table.push_scope();
+
     let mut compiler = Compiler {
         main: Vec::new(),
-        functions: vec![CompiledFunction{code_block: Vec::new()}],
+        functions: Vec::new(),
         strings: Vec::new(),
+        exports: HashMap::new(),
+        imports: Vec::new(),
+        import_by_key: HashMap::new(),
+        import_index: HashMap::new(),
+        module_ns: HashMap::new(),
     };
 
-    for statement in &module.statements {
-        let mut compiled_statement = compiler.compile_statement(statement, &mut symbol_table);
-        compiler.main.append(&mut compiled_statement);
+    // Collect import declarations before compiling any code.
+    for stmt in &module.statements {
+        match stmt {
+            Statement::ImportFrom { path, items } => {
+                for item in items {
+                    let local_name = item.alias.as_ref().unwrap_or(&item.name).clone();
+                    let import_idx = compiler.get_or_add_import(path.clone(), item.name.clone());
+                    compiler.import_index.insert(local_name, import_idx);
+                }
+            }
+            Statement::ImportModule { path, alias } => {
+                let module_name = alias.clone().unwrap_or_else(|| {
+                    path.split('/').last().unwrap_or(path).to_string()
+                });
+                compiler.module_ns.insert(module_name, path.clone());
+            }
+            _ => {}
+        }
     }
 
-    Program {
+    for statement in &module.statements {
+        match statement {
+            Statement::ImportFrom { .. } | Statement::ImportModule { .. } => {}
+            _ => {
+                let mut code = compiler.compile_statement(statement, &mut symbol_table);
+                compiler.main.append(&mut code);
+            }
+        }
+    }
+
+    CompiledModule {
         main: compiler.main,
         functions: compiler.functions,
         strings: compiler.strings,
+        exports: compiler.exports,
+        imports: compiler.imports,
     }
 }
 
 impl Compiler {
 
-    fn compile_function (&mut self, signature: &FunctionSignature, body: &Expression, symbol_table: &mut SymbolTable) 
+    fn compile_function (&mut self, signature: &FunctionSignature, body: &Expression, symbol_table: &mut SymbolTable)
     -> (Vec<Instruction>, usize) {
 
         symbol_table.push_scope();
         let mut bytecode = Vec::new();
 
-        let function_index = self.functions.len();
+        let local_fn_idx = self.functions.len(); // assigned before push
         for (i, arg) in signature.args.iter().enumerate() {
             match &arg.kind {
                 Pattern::Identifier(ident) => {
                     let reg = symbol_table.register_variable(ident);
                     bytecode.push(Instruction::mov(reg, i+1))
                 }
-                _ => {
-
-                }
+                _ => {}
             }
         }
 
@@ -108,17 +162,16 @@ impl Compiler {
 
         symbol_table.pop_scope();
         let reg = symbol_table.register_intermediate();
-        (vec![Instruction::mov_const(reg, function_index as u64)], reg)
+        (vec![Instruction::load_local_fn(reg, local_fn_idx)], reg)
     }
 
-    fn compile_statement (&mut self, statement: &Statement, symbol_table: &mut SymbolTable) 
+    fn compile_statement (&mut self, statement: &Statement, symbol_table: &mut SymbolTable)
     -> Vec<Instruction> {
         let mut bytecode = Vec::new();
 
-        use Statement as Statement;
         match statement {
             Statement::Expression(expression) => {
-                let (mut expr, reg) = self.compile_expression(&expression.kind, symbol_table);
+                let (mut expr, _reg) = self.compile_expression(&expression.kind, symbol_table);
                 bytecode.append(&mut expr);
             },
             Statement::Return(expr) => {
@@ -138,13 +191,13 @@ impl Compiler {
             Statement::Continue => {
                 bytecode.push(Instruction::jmp(CONTINUE_SENTINEL));
             },
+            Statement::ImportFrom { .. } | Statement::ImportModule { .. } => {},
         }
 
         bytecode
-
     }
 
-    fn compile_assignment (&mut self, lhs: &Pattern, rhs: &Expression, symbol_table: &mut SymbolTable) 
+    fn compile_assignment (&mut self, lhs: &Pattern, rhs: &Expression, symbol_table: &mut SymbolTable)
     -> (Vec<Instruction>, usize) {
         let mut bytecode = Vec::new();
 
@@ -160,11 +213,14 @@ impl Compiler {
         };
         let (mut expr, rhs_reg) = self.compile_expression(&rhs, symbol_table);
         bytecode.append(&mut expr);
-        bytecode.push(
-            Instruction::mov(
-                lhs_reg,
-                rhs_reg,
-            ));
+        bytecode.push(Instruction::mov(lhs_reg, rhs_reg));
+
+        if matches!(rhs, Expression::Function { .. }) {
+            if let Pattern::Identifier(name) = lhs {
+                let local_fn_idx = self.functions.len() - 1;
+                self.exports.insert(name.clone(), local_fn_idx);
+            }
+        }
 
         (bytecode, rhs_reg)
     }
@@ -180,8 +236,12 @@ impl Compiler {
                         (vec![Instruction::mov_const(reg, 0)], reg)
                     }
                     _ => {
+                        if let Some(&import_idx) = self.import_index.get(name.as_str()) {
+                            let reg = symbol_table.register_intermediate();
+                            return (vec![Instruction::load_import(reg, import_idx)], reg);
+                        }
                         let reg = symbol_table.get_variable(name);
-                        (Vec::new(), reg.expect(&format!("variable {} was not found fix this later", name)))
+                        (Vec::new(), reg.expect(&format!("variable {} was not found", name)))
                     }
                 }
             }
@@ -223,10 +283,10 @@ impl Compiler {
                 self.compile_function_call(&callee.kind, arguments, symbol_table)
             }
             Expression::String(s) => {
-                let string_index = self.strings.len();
+                let local_str_idx = self.strings.len();
                 self.strings.push(s.clone());
                 let reg = symbol_table.register_intermediate();
-                (vec![Instruction::load_string(reg, string_index)], reg)
+                (vec![Instruction::load_string(reg, local_str_idx)], reg)
             }
             Expression::Array(elements) => {
                 let mut bytecode = Vec::new();
@@ -258,6 +318,16 @@ impl Compiler {
                 bytecode.push(Instruction::load_index(dst_reg, target_reg, index_reg));
 
                 (bytecode, dst_reg)
+            }
+            Expression::MemberAccess { object, field } => {
+                if let Expression::Identifier(alias) = &object.kind {
+                    if let Some(module_path) = self.module_ns.get(alias.as_str()).cloned() {
+                        let import_idx = self.get_or_add_import(module_path, field.clone());
+                        let reg = symbol_table.register_intermediate();
+                        return (vec![Instruction::load_import(reg, import_idx)], reg);
+                    }
+                }
+                (Vec::new(), 0)
             }
             _ => {
                 (Vec::new(), 0)
@@ -296,7 +366,6 @@ impl Compiler {
 
         match op {
             BinaryOp::And => {
-                // if a is false, skip b and keep a (false) as result
                 bytecode.push(Instruction::jmp_cond(b_len + 2, a_reg));
                 bytecode.extend(b_code);
                 bytecode.push(Instruction::mov(result_reg, b_reg));
@@ -305,7 +374,6 @@ impl Compiler {
             }
             BinaryOp::Or => {
                 let tmp_reg = symbol_table.register_intermediate();
-                // if a is true (!a is false), skip b and keep a (true) as result
                 bytecode.push(Instruction::not(tmp_reg, a_reg));
                 bytecode.push(Instruction::jmp_cond(b_len + 2, tmp_reg));
                 bytecode.extend(b_code);
@@ -347,13 +415,14 @@ impl Compiler {
             BinaryOp::Gt  => Instruction::gt(res_reg, lhs_reg, rhs_reg),
             BinaryOp::Eq  => Instruction::eq(res_reg, lhs_reg, rhs_reg),
             BinaryOp::NEq => Instruction::neq(res_reg, lhs_reg, rhs_reg),
+            BinaryOp::Pow => Instruction::pow(res_reg, lhs_reg, rhs_reg),
             _ => Instruction::add(res_reg, lhs_reg, rhs_reg),
         });
 
         (bytecode, res_reg)
     }
 
-    fn compile_block (&mut self, statements: &Vec<Statement>, final_expr: &Option<Box<Node<Expression>>>, symbol_table: &mut SymbolTable) 
+    fn compile_block (&mut self, statements: &Vec<Statement>, final_expr: &Option<Box<Node<Expression>>>, symbol_table: &mut SymbolTable)
     -> (Vec<Instruction>, usize) {
 
         symbol_table.push_scope();
@@ -367,7 +436,6 @@ impl Compiler {
         let final_expr_reg = if let Some(expr) = final_expr {
             let (mut expr_code, expr_reg) = self.compile_expression(&expr.kind, symbol_table);
             bytecode.append(&mut expr_code);
-
             Some(expr_reg)
         }
         else {
@@ -378,15 +446,15 @@ impl Compiler {
 
         if let Some(inner_reg) = final_expr_reg {
             let result_reg = symbol_table.register_intermediate();
-                bytecode.push(Instruction::mov(result_reg, inner_reg));
-                (bytecode, result_reg)
-            } 
-            else {
-                (bytecode, 0) // no value produced, caller shouldn't use this
+            bytecode.push(Instruction::mov(result_reg, inner_reg));
+            (bytecode, result_reg)
+        }
+        else {
+            (bytecode, 0)
         }
     }
 
-    fn compile_conditional (&mut self, condition: &Expression, then_branch: &Expression, else_branch: &Option<Box<Node<Expression>>>, symbol_table: &mut SymbolTable) 
+    fn compile_conditional (&mut self, condition: &Expression, then_branch: &Expression, else_branch: &Option<Box<Node<Expression>>>, symbol_table: &mut SymbolTable)
     -> (Vec<Instruction>, usize) {
         let mut bytecode = Vec::new();
         let (mut cond_code, cond_reg) = self.compile_expression(condition, symbol_table);
@@ -426,7 +494,6 @@ impl Compiler {
         let clen = cond_code.len();
         let blen = body_code.len();
 
-        // patch break/continue sentinels
         for (i, instr) in body_code.iter_mut().enumerate() {
             if !matches!(instr.opcode, Opcode::Jmp) { continue; }
             if instr.op0 == BREAK_SENTINEL as u64 {
@@ -463,9 +530,8 @@ impl Compiler {
 
         bytecode.push(Instruction::call(callee_reg));
 
-        // Evacuate return value out of reg 0 before anything can clobber it
-    let result_reg = symbol_table.register_intermediate();
-    bytecode.push(Instruction::mov(result_reg, 0));
+        let result_reg = symbol_table.register_intermediate();
+        bytecode.push(Instruction::mov(result_reg, 0));
 
         (bytecode, result_reg)
     }

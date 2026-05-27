@@ -1,5 +1,5 @@
-use crate::Diagnostic;
-use crate::Label;
+use crate::diagnostics::Diagnostic;
+use crate::diagnostics::Label;
 
 
 pub fn emit_diagnostics(code: &str, diagnostics: &[Diagnostic]) {

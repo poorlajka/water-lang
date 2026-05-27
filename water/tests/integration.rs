@@ -1,5 +1,10 @@
 use indoc::indoc;
-use water::run_capturing;
+use std::fs;
+use water::{run_capturing, run_capturing_with_dir};
+
+fn write_module(dir: &tempfile::TempDir, name: &str, source: &str) {
+    fs::write(dir.path().join(format!("{}.water", name)), source).unwrap();
+}
 
 // -- arithmetic --
 
@@ -189,6 +194,23 @@ fn continue_skips_iteration() {
     "}), "1\n3\n4\n");
 }
 
+// -- power --
+
+#[test]
+fn power_basic() {
+    assert_eq!(run_capturing("print(2 ** 10)"), "1024\n");
+}
+
+#[test]
+fn power_zero_exponent() {
+    assert_eq!(run_capturing("print(5 ** 0)"), "1\n");
+}
+
+#[test]
+fn power_right_associative() {
+    assert_eq!(run_capturing("print(2 ** 3 ** 2)"), "512\n");
+}
+
 // -- booleans --
 
 #[test]
@@ -337,4 +359,74 @@ fn recursive_function() {
             return n * fact(n - 1)
         print(fact(5))
     "}), "120\n");
+}
+
+// -- imports --
+
+#[test]
+fn import_from_single() {
+    let dir = tempfile::tempdir().unwrap();
+    write_module(&dir, "math", "add = (a, b) => a + b");
+    assert_eq!(
+        run_capturing_with_dir("from math import add\nprint(add(3, 4))", Some(dir.path())),
+        "7\n"
+    );
+}
+
+#[test]
+fn import_from_alias() {
+    let dir = tempfile::tempdir().unwrap();
+    write_module(&dir, "math", "add = (a, b) => a + b");
+    assert_eq!(
+        run_capturing_with_dir("from math import add as plus\nprint(plus(10, 5))", Some(dir.path())),
+        "15\n"
+    );
+}
+
+#[test]
+fn import_from_multiple() {
+    let dir = tempfile::tempdir().unwrap();
+    write_module(&dir, "math", indoc! {"
+        add = (a, b) => a + b
+        mul = (a, b) => a * b
+    "});
+    assert_eq!(
+        run_capturing_with_dir(indoc! {"
+            from math import add, mul
+            print(add(2, 3))
+            print(mul(2, 3))
+        "}, Some(dir.path())),
+        "5\n6\n"
+    );
+}
+
+#[test]
+fn import_module_dot_access() {
+    let dir = tempfile::tempdir().unwrap();
+    write_module(&dir, "math", "square = (x) => x * x");
+    assert_eq!(
+        run_capturing_with_dir("import math\nprint(math.square(5))", Some(dir.path())),
+        "25\n"
+    );
+}
+
+#[test]
+fn import_module_with_alias() {
+    let dir = tempfile::tempdir().unwrap();
+    write_module(&dir, "math", "double = (x) => x * 2");
+    assert_eq!(
+        run_capturing_with_dir("import math as m\nprint(m.double(6))", Some(dir.path())),
+        "12\n"
+    );
+}
+
+#[test]
+fn import_transitive() {
+    let dir = tempfile::tempdir().unwrap();
+    write_module(&dir, "base", "inc = (x) => x + 1");
+    write_module(&dir, "utils", "from base import inc\ndouble_inc = (x) => inc(inc(x))");
+    assert_eq!(
+        run_capturing_with_dir("from utils import double_inc\nprint(double_inc(5))", Some(dir.path())),
+        "7\n"
+    );
 }

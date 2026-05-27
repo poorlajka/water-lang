@@ -2,7 +2,7 @@ mod pratt;
 mod token_stream;
 mod utility;
 
-use crate::ast::{Module, Statement};
+use crate::ast::{Module, Statement, ImportItem};
 use crate::lexer::token::Token;
 use crate::parser::token_stream::TokenStream;
 use logos::Span;
@@ -86,6 +86,31 @@ fn parse_statement(
         return Ok(Statement::Continue);
     }
 
+    if let Some((Token::From, _)) = token_stream.peek() {
+        token_stream.next();
+        let path = parse_module_path(token_stream)?;
+        token_stream.expect(Token::Import)?;
+        let items = parse_import_items(token_stream)?;
+        token_stream.expect_statement_end()?;
+        return Ok(Statement::ImportFrom { path, items });
+    }
+
+    if let Some((Token::Import, _)) = token_stream.peek() {
+        token_stream.next();
+        let path = parse_module_path(token_stream)?;
+        let alias = if matches!(token_stream.peek(), Some((Token::As, _))) {
+            token_stream.next();
+            match token_stream.next() {
+                Some((Token::Identifier(s), _)) => Some(s),
+                _ => return Err(ParsingError::new("Expected alias after 'as'", None)),
+            }
+        } else {
+            None
+        };
+        token_stream.expect_statement_end()?;
+        return Ok(Statement::ImportModule { path, alias });
+    }
+
     match pratt::parse_expression(token_stream, 0) {
         Ok(expression) => {
             token_stream.expect_statement_end()?;
@@ -93,5 +118,45 @@ fn parse_statement(
         }
         Err(error) => Err(error),
     }
+}
 
+fn parse_module_path(token_stream: &mut TokenStream) -> Result<String, ParsingError> {
+    let mut parts = Vec::new();
+    match token_stream.next() {
+        Some((Token::Identifier(s), _)) => parts.push(s),
+        _ => return Err(ParsingError::new("Expected module path", None)),
+    }
+    while matches!(token_stream.peek(), Some((Token::Slash, _))) {
+        token_stream.next();
+        match token_stream.next() {
+            Some((Token::Identifier(s), _)) => parts.push(s),
+            _ => return Err(ParsingError::new("Expected path segment after '/'", None)),
+        }
+    }
+    Ok(parts.join("/"))
+}
+
+fn parse_import_items(token_stream: &mut TokenStream) -> Result<Vec<ImportItem>, ParsingError> {
+    let mut items = Vec::new();
+    loop {
+        let name = match token_stream.next() {
+            Some((Token::Identifier(s), _)) => s,
+            _ => return Err(ParsingError::new("Expected import name", None)),
+        };
+        let alias = if matches!(token_stream.peek(), Some((Token::As, _))) {
+            token_stream.next();
+            match token_stream.next() {
+                Some((Token::Identifier(s), _)) => Some(s),
+                _ => return Err(ParsingError::new("Expected alias after 'as'", None)),
+            }
+        } else {
+            None
+        };
+        items.push(ImportItem { name, alias });
+        if !matches!(token_stream.peek(), Some((Token::Comma, _))) {
+            break;
+        }
+        token_stream.next();
+    }
+    Ok(items)
 }

@@ -34,13 +34,19 @@ pub struct Module {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ImportItem {
+    pub name: String,
+    pub alias: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Expression(ExprNode),
-    //Import(Import),
     Return(Option<Node<Expression>>),
     Break,
     Continue,
-    //ForLoop(ForLoop),
+    ImportFrom { path: String, items: Vec<ImportItem> },
+    ImportModule { path: String, alias: Option<String> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -93,6 +99,11 @@ pub enum Expression {
     Index {
         target: Box<ExprNode>,
         index: Box<ExprNode>,
+    },
+
+    MemberAccess {
+        object: Box<ExprNode>,
+        field: String,
     },
 
     FunctionCall {

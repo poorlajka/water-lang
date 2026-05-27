@@ -83,6 +83,18 @@ use logos::Logos;
 #[logos(error = LexingError)]
 pub enum Token {
     // Keywords
+    #[token("import")]
+    Import,
+
+    #[token("from")]
+    From,
+
+    #[token("as")]
+    As,
+
+    #[token(".")]
+    Dot,
+
     #[token("and")]
     #[token("&&")]
     And,
@@ -183,6 +195,9 @@ pub enum Token {
     Plus,
     #[token("-")]
     Minus,
+    #[token("**")]
+    StarStar,
+
     #[token("*")]
     Star,
 

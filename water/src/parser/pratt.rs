@@ -75,6 +75,8 @@ fn compound_assign_op(tok: &Token) -> Option<BinaryOp> {
 
 fn infix_binding_power(tok: &Token) -> Option<(u8, u8, BinaryOp)> {
     match tok {
+        Token::StarStar => Some((30, 29, BinaryOp::Pow)),
+
         Token::Plus => Some((10, 11, BinaryOp::Add)),
         Token::Minus => Some((10, 11, BinaryOp::Sub)),
         Token::Star => Some((20, 21, BinaryOp::Mul)),
@@ -181,6 +183,25 @@ fn parse_postfix(
     lhs: &Node<Expression>,
 ) -> Result<Option<Node<Expression>>, ParsingError> {
     match token_stream.peek() {
+        Some((Token::Dot, _)) => {
+            token_stream.next();
+            match token_stream.next() {
+                Some((Token::Identifier(field), end_span)) => {
+                    let span = span_from_to(lhs.span.clone(), end_span);
+                    Ok(Some(create_node(
+                        token_stream,
+                        span,
+                        Expression::MemberAccess {
+                            object: Box::new(lhs.clone()),
+                            field,
+                        },
+                    )))
+                }
+                Some((_, span)) => Err(ParsingError::new("Expected field name after '.'", Some(span))),
+                None => Err(ParsingError::new("Unexpected EOF after '.'", None)),
+            }
+        }
+
         Some((Token::LBracket, _)) => {
             // Indexing
             token_stream.next(); // consume '['

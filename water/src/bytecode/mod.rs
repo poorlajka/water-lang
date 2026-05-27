@@ -26,7 +26,11 @@ pub enum Opcode {
     LoadIndex = 20,
     StoreIndex = 21,
     Not = 22,
+    Pow = 23,
     COUNT,
+    // Pre-link only: patched to MovConst by the linker before execution.
+    LoadLocalFn = 64,
+    LoadImport = 65,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -133,8 +137,21 @@ impl Instruction {
     pub fn not(dst: usize, src: usize) -> Self {
         Self::new(Opcode::Not, dst as u64, src as u64, 0)
     }
+
+    pub fn pow(dst: usize, base: usize, exp: usize) -> Self {
+        Self::new(Opcode::Pow, dst as u64, base as u64, exp as u64)
+    }
+
+    pub fn load_local_fn(dst: usize, local_fn_idx: usize) -> Self {
+        Self::new(Opcode::LoadLocalFn, dst as u64, local_fn_idx as u64, 0)
+    }
+
+    pub fn load_import(dst: usize, import_idx: usize) -> Self {
+        Self::new(Opcode::LoadImport, dst as u64, import_idx as u64, 0)
+    }
 }
 
+#[derive(Clone)]
 pub struct CompiledFunction {
     pub code_block: Vec<Instruction>,
 }
