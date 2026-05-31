@@ -1,7 +1,84 @@
 
-i = 0
-while i < 5
-    print(i)
-    i = i + 1
-    if i == 2
-        break
+draw = (grid) =>
+    row = 0
+    while row < 10
+        col = 0
+        while col < 10
+            if grid[row][col] == 1
+                print("#")
+            else
+                print(".")
+            col += 1
+        println("")
+        row += 1
+
+grid = [
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+]
+
+draw(grid)
+
+next = [
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+]
+
+step = (grid, next) =>
+    row = 0
+    while row < 10
+        col = 0
+        while col < 10
+            neighbor_count = 0
+            row_delta = -1
+            while row_delta <= 1
+                col_delta = -1
+                while col_delta <= 1
+                    if row_delta != 0 or col_delta != 0
+                        neighbor_row = row + row_delta
+                        neighbor_col = col + col_delta
+                        if neighbor_row >= 0 and neighbor_row < 10 and neighbor_col >= 0 and neighbor_col < 10
+                            neighbor_count += grid[neighbor_row][neighbor_col]
+                    col_delta += 1
+                row_delta += 1
+            if neighbor_count == 3 or (grid[row][col] == 1 and neighbor_count == 2)
+                next[row][col] = 1
+            else
+                next[row][col] = 0
+            col += 1
+        row += 1
+
+grid[1][2] = 1
+grid[2][3] = 1
+grid[3][1] = 1
+grid[3][2] = 1
+grid[3][3] = 1
+
+generation = 0
+while generation < 10
+    println("\e[2J\e[H")
+    println("Generation:")
+    println(generation)
+    draw(grid)
+    println("")
+    step(grid, next)
+    temp = grid
+    grid = next
+    next = temp
+    generation += 1

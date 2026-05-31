@@ -133,6 +133,14 @@ impl Node<Expression> {
                     .collect::<Result<Vec<_>, _>>()?,
             ),
 
+            Expression::Index { target, index } => {
+                let target_pat = target.as_ref().clone().into_pattern()?;
+                Pattern::Index {
+                    target: Box::new(target_pat),
+                    index: index.clone(),
+                }
+            }
+
             _ => {
                 return Err(ParsingError::new(
                     "Invalid assignment target",
@@ -149,6 +157,7 @@ impl Node<Expression> {
 pub enum Pattern {
     Identifier(String),
     Tuple(Vec<PatNode>),
+    Index { target: Box<PatNode>, index: Box<ExprNode> },
 
     Typed { pattern: Box<PatNode>, ty: TypeNode }, // future:
                                                    // Wildcard,

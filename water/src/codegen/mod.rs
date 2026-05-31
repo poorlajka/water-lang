@@ -197,9 +197,40 @@ impl Compiler {
         bytecode
     }
 
+    fn compile_index_target(&mut self, pattern: &Pattern, symbol_table: &mut SymbolTable)
+    -> (Vec<Instruction>, usize) {
+        match pattern {
+            Pattern::Identifier(name) => {
+                let reg = symbol_table.get_variable(name)
+                    .expect(&format!("variable {} was not found", name));
+                (Vec::new(), reg)
+            }
+            Pattern::Index { target, index } => {
+                let (mut target_code, arr_reg) = self.compile_index_target(&target.kind, symbol_table);
+                let (mut index_code, idx_reg) = self.compile_expression(&index.kind, symbol_table);
+                let dst_reg = symbol_table.register_intermediate();
+                target_code.append(&mut index_code);
+                target_code.push(Instruction::load_index(dst_reg, arr_reg, idx_reg));
+                (target_code, dst_reg)
+            }
+            _ => panic!("invalid index assignment target"),
+        }
+    }
+
     fn compile_assignment (&mut self, lhs: &Pattern, rhs: &Expression, symbol_table: &mut SymbolTable)
     -> (Vec<Instruction>, usize) {
         let mut bytecode = Vec::new();
+
+        if let Pattern::Index { target, index } = lhs {
+            let (mut target_code, arr_reg) = self.compile_index_target(&target.kind, symbol_table);
+            let (mut index_code, idx_reg) = self.compile_expression(&index.kind, symbol_table);
+            let (mut rhs_code, rhs_reg) = self.compile_expression(rhs, symbol_table);
+            bytecode.append(&mut target_code);
+            bytecode.append(&mut index_code);
+            bytecode.append(&mut rhs_code);
+            bytecode.push(Instruction::store_index(arr_reg, idx_reg, rhs_reg));
+            return (bytecode, rhs_reg);
+        }
 
         let lhs_reg = match &lhs {
             Pattern::Identifier(ident) => {
@@ -231,9 +262,13 @@ impl Compiler {
         match expression {
             Expression::Identifier(name) => {
                 match name.as_str() {
-                    "print" => {
+                    "println" => {
                         let reg = symbol_table.register_intermediate();
                         (vec![Instruction::mov_const(reg, 0)], reg)
+                    }
+                    "print" => {
+                        let reg = symbol_table.register_intermediate();
+                        (vec![Instruction::mov_const(reg, 1)], reg)
                     }
                     _ => {
                         if let Some(&import_idx) = self.import_index.get(name.as_str()) {
@@ -296,12 +331,13 @@ impl Compiler {
                 bytecode.push(Instruction::create_array(arr_reg, size));
 
                 for (i, element) in elements.iter().enumerate() {
+                    symbol_table.push_scope();
                     let (mut elem_code, elem_reg) = self.compile_expression(&element.kind, symbol_table);
                     bytecode.append(&mut elem_code);
-
                     let idx_reg = symbol_table.register_intermediate();
                     bytecode.push(Instruction::mov_const(idx_reg, tag_int(i as i64)));
                     bytecode.push(Instruction::store_index(arr_reg, idx_reg, elem_reg));
+                    symbol_table.pop_scope();
                 }
 
                 (bytecode, arr_reg)

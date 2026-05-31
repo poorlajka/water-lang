@@ -6,10 +6,10 @@ use crate::codegen::CompiledModule;
 pub fn link(modules: Vec<(String, CompiledModule)>) -> Program {
     let n = modules.len();
 
-    // Assign base offsets. Index 0 in the final functions vec is the print builtin.
+    // Assign base offsets. Index 0 = println, 1 = print.
     let mut fn_bases = vec![0usize; n];
     let mut str_bases = vec![0usize; n];
-    let mut fn_cursor = 1usize;
+    let mut fn_cursor = 2usize;
     let mut str_cursor = 0usize;
     for i in 0..n {
         fn_bases[i] = fn_cursor;
@@ -44,7 +44,8 @@ pub fn link(modules: Vec<(String, CompiledModule)>) -> Program {
     // Main is the last module (topological order: deps before dependents).
     let main_code = modules.last().unwrap().1.main.clone();
 
-    let mut functions = vec![CompiledFunction { code_block: Vec::new() }];
+    let placeholder = CompiledFunction { code_block: Vec::new() };
+    let mut functions = vec![placeholder.clone(), placeholder]; // 0 = println, 1 = print
     for (_, cm) in &modules {
         functions.extend(cm.functions.iter().cloned());
     }

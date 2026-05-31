@@ -47,44 +47,60 @@ pub fn tokenize(code: &str) -> LexingArtifacts {
 
     let mut lexer = Token::lexer(code).spanned();
     let mut indent_stack: Vec<usize> = vec![0];
+    let mut bracket_depth: usize = 0;
 
     while let Some((token, span)) = lexer.next() {
-        match token.clone() {
-            Ok(token) => lexing_artifacts.tokens.push((token, span.clone())),
-            Err(error) => lexing_artifacts.errors.push((error, span.clone())),
-        }
+        match token {
+            Err(ref error) => lexing_artifacts.errors.push((error.clone(), span.clone())),
 
-        if let Ok(Token::Newline) = token {
-            let slice = lexer.remainder();
-
-            let leading_ws: String = slice
-                .chars()
-                .take_while(|c| *c == ' ' || *c == '\t')
-                .collect();
-
-            // Ignore blank lines, they don't affect indentation
-            let next_non_ws = slice[leading_ws.len()..].chars().next();
-            if matches!(next_non_ws, None | Some('\n') | Some('\r')) {
-                continue;
+            Ok(Token::LBracket) | Ok(Token::LParen) => {
+                bracket_depth += 1;
+                lexing_artifacts.tokens.push((token.unwrap(), span));
+            }
+            Ok(Token::RBracket) | Ok(Token::RParen) => {
+                bracket_depth = bracket_depth.saturating_sub(1);
+                lexing_artifacts.tokens.push((token.unwrap(), span));
             }
 
-            let new_indent = count_columns(&leading_ws);
-            let current_indent = *indent_stack.last().unwrap();
+            Ok(Token::Newline) if bracket_depth > 0 => {
+                // Inside brackets: ignore newlines and any indentation changes.
+            }
 
-            if new_indent > current_indent {
-                indent_stack.push(new_indent);
-                lexing_artifacts.tokens.push((Token::Indent, span.clone()));
-            } else if new_indent < current_indent {
-                while *indent_stack.last().unwrap() > new_indent {
-                    indent_stack.pop();
-                    lexing_artifacts.tokens.push((Token::Dedent, span.clone()));
-                }
+            Ok(Token::Newline) => {
                 lexing_artifacts.tokens.push((Token::Newline, span.clone()));
 
-                if *indent_stack.last().unwrap() != new_indent {
-                    lexing_artifacts.errors.push((LexingError::Other, span.clone()));
+                let slice = lexer.remainder();
+                let leading_ws: String = slice
+                    .chars()
+                    .take_while(|c| *c == ' ' || *c == '\t')
+                    .collect();
+
+                // Ignore blank lines, they don't affect indentation
+                let next_non_ws = slice[leading_ws.len()..].chars().next();
+                if matches!(next_non_ws, None | Some('\n') | Some('\r')) {
+                    continue;
+                }
+
+                let new_indent = count_columns(&leading_ws);
+                let current_indent = *indent_stack.last().unwrap();
+
+                if new_indent > current_indent {
+                    indent_stack.push(new_indent);
+                    lexing_artifacts.tokens.push((Token::Indent, span.clone()));
+                } else if new_indent < current_indent {
+                    while *indent_stack.last().unwrap() > new_indent {
+                        indent_stack.pop();
+                        lexing_artifacts.tokens.push((Token::Dedent, span.clone()));
+                    }
+                    lexing_artifacts.tokens.push((Token::Newline, span.clone()));
+
+                    if *indent_stack.last().unwrap() != new_indent {
+                        lexing_artifacts.errors.push((LexingError::Other, span.clone()));
+                    }
                 }
             }
+
+            Ok(token) => lexing_artifacts.tokens.push((token, span)),
         }
     }
 

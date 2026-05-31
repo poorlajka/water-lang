@@ -265,6 +265,7 @@ fn parse_string(lex: &mut logos::Lexer<Token>) -> String {
                     '\\' => result.push('\\'),
                     '"' => result.push('"'),
                     '\'' => result.push('\''),
+                    'e' => result.push('\x1b'),
                     other => result.push(other),
                 }
             }

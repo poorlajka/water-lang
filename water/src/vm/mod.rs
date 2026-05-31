@@ -13,7 +13,7 @@ pub fn exec_with(program: &Program, output: Box<dyn Write>) {
     interpreter.run(program);
 }
 
-const NR_OF_REGISTERS: usize = 100;
+const NR_OF_REGISTERS: usize = 256;
 
 struct VM {
     pub gp_registers: [u64; NR_OF_REGISTERS],
@@ -225,12 +225,15 @@ impl Interpreter {
     fn handle_call(&mut self, instr: Instruction, _program: &Program) {
         let index = self.vm.gp_registers[instr.op0 as usize];
         match index {
-            0 => {
+            0 | 1 => { // 0 = println, 1 = print
                 let val = self.vm.gp_registers[1];
+                let newline = index == 0;
                 if is_bool(val) {
-                    writeln!(self.vm.output, "{}", untag_bool(val)).ok();
+                    if newline { writeln!(self.vm.output, "{}", untag_bool(val)).ok(); }
+                    else { write!(self.vm.output, "{}", untag_bool(val)).ok(); }
                 } else if is_int(val) {
-                    writeln!(self.vm.output, "{}", untag_int(val)).ok();
+                    if newline { writeln!(self.vm.output, "{}", untag_int(val)).ok(); }
+                    else { write!(self.vm.output, "{}", untag_int(val)).ok(); }
                 } else if is_pointer(val) {
                     let ptr = untag_pointer(val);
                     let kind = self.vm.heap.get_kind(ptr);
@@ -240,7 +243,8 @@ impl Interpreter {
                             let data_ptr = self.vm.heap.data_ptr(ptr);
                             let bytes = self.vm.heap.read_bytes(data_ptr, size);
                             let s = std::str::from_utf8(bytes).expect("invalid utf8");
-                            writeln!(self.vm.output, "{}", s).ok();
+                            if newline { writeln!(self.vm.output, "{}", s).ok(); }
+                            else { write!(self.vm.output, "{}", s).ok(); }
                         }
                         _ => { writeln!(self.vm.output, "<object at {:x}>", val).ok(); }
                     }
